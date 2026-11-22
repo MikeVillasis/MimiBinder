@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 
 export function cx(...p: (string | false | null | undefined)[]) {
   return p.filter(Boolean).join(" ");
@@ -247,7 +247,7 @@ export function Badge({ children, tone = "neutral" }: { children: ReactNode; ton
   return (
     <span
       className={cx(
-        "inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold",
+        "inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold",
         tone === "accent" ? "bg-accent/20 text-accent" : "bg-surface-2 text-muted",
       )}
     >
@@ -262,6 +262,48 @@ export function Stat({ label, value, tone, sub }: { label: string; value: ReactN
       <div className="text-xs font-medium uppercase tracking-wide text-muted">{label}</div>
       <div className={cx("mt-1 text-2xl font-extrabold tabular-nums", tone === "good" && "text-good", tone === "bad" && "text-danger")}>{value}</div>
       {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
+    </div>
+  );
+}
+
+/** "Delta Reign" -> "DR", "30th Celebration" -> "30C", "Scarlet & Violet" -> "SV". */
+export function setInitials(name: string): string {
+  const words = name.split(/[\s\-–:]+/).filter((w) => /[\p{L}\p{N}]/u.test(w));
+  return words
+    .slice(0, 3)
+    .map((w) => (/^\d/.test(w) ? w.match(/^\d+/)![0] : w[0].toUpperCase()))
+    .join("")
+    .slice(0, 4);
+}
+
+/**
+ * A set (or generation) logo that falls back to the set symbol, then to initials, both when TCGdex
+ * has no image (common for the newest sets) and when an image fails to load.
+ * Sized by the parent: pass a `size` box class such as "h-10 w-14".
+ */
+export function SetLogo({ name, logo, symbol, className = "h-10 w-14" }: { name: string; logo?: string; symbol?: string; className?: string }) {
+  const [failed, setFailed] = useState<string[]>([]);
+  const src = [logo, symbol].find((u): u is string => !!u && !failed.includes(u));
+  return (
+    <div className={cx("flex shrink-0 items-center justify-center", className)}>
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={src}
+          src={src}
+          alt=""
+          loading="lazy"
+          onError={() => setFailed((f) => [...f, src])}
+          className={cx("max-h-full max-w-full object-contain", src === symbol && "max-h-[80%] max-w-[80%]")}
+        />
+      ) : (
+        <span
+          aria-hidden="true"
+          className="flex h-full max-h-10 w-full max-w-14 items-center justify-center rounded-lg border border-line bg-surface-2 text-xs font-extrabold tracking-wide text-muted"
+        >
+          {setInitials(name)}
+        </span>
+      )}
     </div>
   );
 }

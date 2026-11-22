@@ -211,7 +211,7 @@ export function CollectionView() {
                     <div className="whitespace-nowrap text-xs font-bold text-accent" title={value != null ? fmtDisplay(value) : undefined} aria-label={value != null ? fmtDisplay(value) : "No price"}>
                       {value != null ? (value >= 1000 ? compactFmt(value) : fmtDisplay(value)) : "—"}
                     </div>
-                    <div className="truncate text-[11px] text-muted">
+                    <div className="truncate text-xs text-muted">
                       {VARIANT_LABELS[e.variant]} · {e.condition}
                     </div>
                   </div>

@@ -34,23 +34,30 @@ export function groupBySerie(entries: CollectionEntry[]): Map<string, Collection
 
 /**
  * Completion counts unique numbered cards (localId 1..officialCount) owned from this set,
- * so secret rares and lettered promos (e.g. "TG01") don't push it past 100%.
+ * so secret rares and lettered cards (e.g. "199", "TG01", "GG69") don't push it past 100%.
+ * Those are counted separately in `secret` (unique cards beyond the official count).
  * `percent` is floored, so it only reads 100 when the set is complete.
  */
 export function setCompletion(
   entries: CollectionEntry[],
   set: SetSummary,
-): { owned: number; total: number; percent: number } {
+): { owned: number; total: number; percent: number; secret: number } {
   const total = set.officialCount;
   const owned = new Set<number>();
+  const secret = new Set<string>();
   for (const e of entries) {
     if (!live(e) || e.setId !== set.id || e.quantity <= 0) continue;
-    if (!/^\d+$/.test(e.localId)) continue;
-    const n = parseInt(e.localId, 10);
-    if (n >= 1 && n <= total) owned.add(n);
+    const id = e.localId.trim();
+    if (/^\d+$/.test(id)) {
+      const n = parseInt(id, 10);
+      if (n >= 1 && n <= total) owned.add(n);
+      else if (n > total) secret.add(String(n));
+    } else if (id) {
+      secret.add(id.toUpperCase());
+    }
   }
   const percent = total > 0 ? Math.floor((owned.size / total) * 100) : 0;
-  return { owned: owned.size, total, percent };
+  return { owned: owned.size, total, percent, secret: secret.size };
 }
 
 /**

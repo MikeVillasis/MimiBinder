@@ -124,10 +124,10 @@ function ThemeCard() {
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-sm font-bold">{t.name}</span>
-                <span className="text-[11px] font-medium uppercase tracking-wide text-muted">{t.mode}</span>
+                <span className="text-xs font-medium uppercase tracking-wide text-muted">{t.mode}</span>
               </div>
               <p className="text-xs text-muted">{t.description}</p>
-              {t.credit && <p className="text-[11px] leading-snug text-muted">{creditText(t)}</p>}
+              {t.credit && <p className="text-xs leading-snug text-muted">{creditText(t)}</p>}
               {on && (
                 <span className="absolute right-2.5 top-2.5 flex h-6 w-6 items-center justify-center rounded-full bg-accent text-accent-fg" aria-hidden="true">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">

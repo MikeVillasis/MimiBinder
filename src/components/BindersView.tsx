@@ -8,7 +8,7 @@ import { groupBySerie, groupBySet, setCompletion } from "@/lib/collection";
 import { createBinder, useBinders, useEntries } from "@/lib/db";
 import type { SetSummary } from "@/lib/types";
 import { useAsync } from "./hooks";
-import { Button, EmptyState, ErrorState, Segmented, Skeleton, ProgressBar, inputCls } from "./ui";
+import { Button, EmptyState, ErrorState, Segmented, Skeleton, ProgressBar, SetLogo, inputCls } from "./ui";
 
 type Tab = "sets" | "generations" | "custom";
 
@@ -38,26 +38,18 @@ export function BindersView() {
   );
 }
 
-function SetRow({ set, owned, c }: { set: SetSummary; owned: boolean; c?: { owned: number; total: number; percent: number } }) {
+function SetRow({ set, owned, c }: { set: SetSummary; owned: boolean; c?: ReturnType<typeof setCompletion> }) {
   return (
     <Link
       href={`/binders/set/${encodeURIComponent(set.id)}`}
       className="flex min-h-16 items-center gap-3 rounded-2xl border border-line bg-surface p-3 hover:border-accent/50"
     >
-      <div className="flex h-10 w-14 shrink-0 items-center justify-center">
-        {set.logo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={set.logo} alt="" loading="lazy" className="max-h-10 max-w-14 object-contain" />
-        ) : set.symbol ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={set.symbol} alt="" loading="lazy" className="max-h-8 max-w-8 object-contain" />
-        ) : null}
-      </div>
+      <SetLogo name={set.name} logo={set.logo} symbol={set.symbol} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <span className="truncate text-sm font-bold">{set.name}</span>
           <span className="shrink-0 text-xs tabular-nums text-muted">
-            {owned && c ? `${c.owned}/${c.total}` : `${set.officialCount} cards`}
+            {owned && c ? `${c.owned}/${c.total}${c.secret ? ` +${c.secret}` : ""}` : `${set.officialCount} cards`}
           </span>
         </div>
         <div className="mb-1.5 truncate text-xs text-muted">
@@ -119,12 +111,7 @@ function GenerationsTab() {
             href={`/binders/serie/${encodeURIComponent(s.id)}`}
             className="flex min-h-16 items-center gap-3 rounded-2xl border border-line bg-surface p-3 hover:border-accent/50"
           >
-            <div className="flex h-10 w-14 shrink-0 items-center justify-center">
-              {s.logo && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={s.logo} alt="" loading="lazy" className="max-h-10 max-w-14 object-contain" />
-              )}
-            </div>
+            <SetLogo name={s.name} logo={s.logo} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-bold">{s.name}</div>
               <div className="text-xs text-muted">

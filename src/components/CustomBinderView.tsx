@@ -72,7 +72,7 @@ export function CustomBinderView({ id }: { id: string }) {
                 <CardImage image={e.image} name={e.cardName} className="card-shadow" />
               </Link>
               <div className="mt-1 truncate text-xs font-semibold">{e.cardName}</div>
-              <div className="truncate text-[11px] text-muted">
+              <div className="truncate text-xs text-muted">
                 {VARIANT_LABELS[e.variant]} · ×{e.quantity}
               </div>
               <button

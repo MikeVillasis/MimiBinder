@@ -64,7 +64,18 @@ describe("setCompletion", () => {
       entry({ localId: "003", deletedAt: "2026-02-01T00:00:00.000Z" }),
       entry({ localId: "004", setId: "other" }),
     ];
-    expect(setCompletion(es, set151)).toEqual({ owned: 2, total: 165, percent: 1 });
+    expect(setCompletion(es, set151)).toEqual({ owned: 2, total: 165, percent: 1, secret: 2 });
+  });
+
+  it("counts secret rares once each, numeric or lettered", () => {
+    const es = [
+      entry({ localId: "199" }),
+      entry({ localId: "0199", variant: "reverse" }), // same card
+      entry({ localId: "tg01" }),
+      entry({ localId: "TG01" }), // same card, different case
+      entry({ localId: "GG69", quantity: 0 }), // none owned
+    ];
+    expect(setCompletion(es, set151).secret).toBe(2);
   });
 
   it("only reaches 100 when complete", () => {

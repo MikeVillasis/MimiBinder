@@ -30,7 +30,7 @@ export function CardTile({
       </Link>
       <div className="mt-1.5 min-w-0 px-0.5">
         <div className="truncate text-xs font-semibold">{name}</div>
-        {localId && <div className="text-[11px] text-muted">#{localId}</div>}
+        {localId && <div className="text-xs text-muted">#{localId}</div>}
         {footer}
       </div>
     </div>

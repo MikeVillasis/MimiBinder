@@ -9,7 +9,7 @@ import { useCollectionPrices } from "@/lib/useCollectionPrices";
 import { VARIANT_LABELS } from "@/lib/types";
 import { CardImage } from "./CardImage";
 import { cardHref, entryCost, entryValue, useAsync, useMoney } from "./hooks";
-import { EmptyState, PageHeader, ProgressBar, Skeleton, Stat } from "./ui";
+import { EmptyState, PageHeader, ProgressBar, SetLogo, Skeleton, Stat } from "./ui";
 
 export function DashboardView() {
   const entries = useEntries();
@@ -160,13 +160,23 @@ export function DashboardView() {
           <div className="grid gap-3 md:grid-cols-2">
             {completion.map(({ set, c }) => (
               <Link key={set.id} href={`/binders/set/${encodeURIComponent(set.id)}`} className="rounded-2xl border border-line bg-surface p-3 hover:border-accent/50">
-                <div className="mb-2 flex items-center justify-between gap-2 text-sm">
-                  <span className="truncate font-semibold">{set.name}</span>
-                  <span className="shrink-0 tabular-nums text-muted">
-                    {c.owned}/{c.total} · {Math.round(c.percent)}%
-                  </span>
+                <div className="flex items-center gap-3">
+                  <SetLogo name={set.name} logo={set.logo} symbol={set.symbol} className="h-9 w-12" />
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-2 flex items-center justify-between gap-2 text-sm">
+                      <span className="truncate font-semibold">{set.name}</span>
+                      <span className="shrink-0 tabular-nums text-muted">
+                        {c.owned}/{c.total} · {Math.round(c.percent)}%
+                      </span>
+                    </div>
+                    <ProgressBar percent={c.percent} label={`${set.name} completion`} />
+                    {c.secret > 0 && (
+                      <div className="mt-1.5 text-xs text-muted">
+                        <span className="font-semibold text-accent">+{c.secret}</span> secret rare{c.secret === 1 ? "" : "s"}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <ProgressBar percent={c.percent} label={`${set.name} completion`} />
               </Link>
             ))}
           </div>

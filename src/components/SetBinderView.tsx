@@ -33,10 +33,6 @@ export function SetBinderView({ setId }: { setId: string }) {
   if (error || !set) return <ErrorState message={error ?? "Set not found."} onRetry={retry} />;
 
   const c = setCompletion(mine, set);
-  // Secret rares are numbered past the official count and don't count toward completion.
-  const secretsOwned = new Set(
-    mine.filter((e) => Number.parseInt(e.localId, 10) > set.officialCount).map((e) => e.localId),
-  ).size;
   const cards = set.cards.filter((card) => (show === "all" ? true : show === "owned" ? qty.has(card.id) : !qty.has(card.id)));
 
   return (
@@ -66,9 +62,9 @@ export function SetBinderView({ setId }: { setId: string }) {
             {c.owned}/{c.total} · <span className="font-bold text-accent">{Math.round(c.percent)}%</span>
           </span>
         </div>
-        {secretsOwned > 0 && (
+        {c.secret > 0 && (
           <p className="mb-2 text-xs text-muted">
-            +{secretsOwned} secret rare{secretsOwned === 1 ? "" : "s"} owned (beyond #{set.officialCount})
+            +{c.secret} secret rare{c.secret === 1 ? "" : "s"} owned, not counted toward completion
           </p>
         )}
         <ProgressBar percent={c.percent} label={`${set.name} completion`} />
