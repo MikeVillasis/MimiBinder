@@ -68,7 +68,13 @@ describe("assessments", () => {
     expect("actual" in got).toBe(false);
 
     await deleteAssessment(a.id);
-    expect(await db.assessments.get(a.id)).toBeUndefined();
+    const tomb = (await db.assessments.get(a.id))!;
+    expect(tomb.deletedAt).toBeTruthy();
+    expect(tomb.updatedAt).toBe(tomb.deletedAt);
+    expect(tomb.thumbs).toBeUndefined();
+    expect(tomb.back).toBeUndefined();
+    expect(tomb.actual).toBeUndefined();
+    await expect(updateAssessment(a.id, { notes: "x" })).rejects.toThrow(/not found/);
   });
 
   it("is found by card id", async () => {
@@ -109,8 +115,9 @@ describe("backup compatibility", () => {
     await saveAssessment(input({ cardName: "local only" }));
     const res = await importCollection(json, "replace");
     expect(res.assessments).toBe(1);
-    const all = await db.assessments.toArray();
-    expect(all).toHaveLength(1);
+    const all = (await db.assessments.toArray()).filter((r) => !r.deletedAt);
+    expect(all).toHaveLength(1); // the "local only" check is tombstoned so the deletion syncs
+    expect(await db.assessments.count()).toBe(2);
     expect(all[0].id).toBe(a.id);
     expect(all[0].actual).toEqual({ grade: 8.5 });
     expect(all[0].back!.flags[0].crop).toMatch(/^data:image/);

@@ -3,6 +3,7 @@ import {
   chunk,
   dedupeNewest,
   fromRemoteRow,
+  isMissingRelationError,
   isNewer,
   maxSyncedAt,
   pullLowerBound,
@@ -179,5 +180,23 @@ describe("helpers", () => {
   });
   it("dedupeNewest keeps one per id", () => {
     expect(dedupeNewest([rec("a", "2026-01-01T00:00:00Z"), rec("a", "2026-01-02T00:00:00Z")])).toHaveLength(1);
+  });
+});
+
+describe("isMissingRelationError", () => {
+  it("recognises a missing table or RPC (migration not run)", () => {
+    expect(isMissingRelationError({ code: "PGRST205", message: "Could not find the table 'public.grading_assessments' in the schema cache" })).toBe(true);
+    expect(isMissingRelationError({ code: "PGRST202", message: "Could not find the function public.push_grading_assessments(rows) in the schema cache" })).toBe(true);
+    expect(isMissingRelationError({ code: "42P01", message: 'relation "public.grading_assessments" does not exist' })).toBe(true);
+    expect(isMissingRelationError({ code: "42883", message: "function does not exist" })).toBe(true);
+    expect(isMissingRelationError({ message: "Could not find the function public.push_grading_assessments(rows) in the schema cache" })).toBe(true);
+  });
+
+  it("does not swallow real errors", () => {
+    expect(isMissingRelationError(null)).toBe(false);
+    expect(isMissingRelationError({ code: "28000", message: "not authenticated" })).toBe(false);
+    expect(isMissingRelationError({ code: "42501", message: "permission denied for table grading_assessments" })).toBe(false);
+    expect(isMissingRelationError({ code: "", message: "TypeError: Failed to fetch" })).toBe(false);
+    expect(isMissingRelationError({ code: "PGRST204", message: "Could not find the 'x' column of 'entries' in the schema cache" })).toBe(false);
   });
 });

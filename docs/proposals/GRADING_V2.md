@@ -11,7 +11,7 @@ The tool still never predicts a grade. It reports two ceilings and says which is
   thresholds, shown with the evidence photos so the owner can judge.
 - **Surface** (scratches, print lines, dents, creases) is always "not assessed".
 
-Everything runs in the browser. No photo, crop or result leaves the device; nothing new is fetched from the network.
+Everything runs in the browser and nothing new is fetched from the network. Photos never leave the device; a check you save (with its small thumbnails and evidence crops, if kept) syncs to your Supabase account when you are signed in.
 
 ## What was built
 
@@ -69,8 +69,10 @@ CIELAB. Each column is compared with the card's own colours:
   table changes, so a version 1 database opens with its rows intact (tested).
 - The JSON backup stays `version: 1` and gains an `assessments` key. Older app versions ignore it; an older backup
   without it still imports and leaves the local log alone (tested, also in the browser).
-- **Not synced.** `src/lib/sync/**` is untouched. Assessments hold photos and condition notes; keeping them local is
-  the safe default (see open questions).
+- **Synced when signed in** (owner approved; migration `0003_grading_assessments.sql`). Same model as entries:
+  last-write-wins on `updatedAt`, deletions are tombstones (which drop the photos, notes and grade). Thumbnails and
+  evidence crops stay as JPEG data URLs inside the row; the pushed copy is kept under ~180 KB (re-encoded smaller,
+  or images dropped as a last resort). Without the migration, sync skips assessments and keeps working.
 
 ## Measured results
 
@@ -212,7 +214,6 @@ The cap is always a whole grade; the code never produces 9.5.
 - **Phase 3 (LLM explanation)**: out of scope (not free, not on-device).
 - **Better silver-on-white detection**: not attempted; the 3 failing `whiteSilver` seeds and 2 `cloth` seeds remain.
 - **Shareable summary image**: a text summary is built; an image is not.
-- **Syncing assessments** to Supabase: left out on purpose.
 - **Phase 4 (learned model)**: needs the owner's own graded cards; the log now collects them.
 - **Raking-light surface capture**: not started.
 - **Re-running the flags after the user moves a line**, and flags on user-chosen regions.
@@ -223,8 +224,7 @@ The cap is always a whole grade; the code never produces 9.5.
    surface)? That is the fastest way to find out whether the whitening thresholds are in the right place.
 2. **Probable ceiling wording**: is "Probable ceiling: PSA 8" the right tone, or would you rather see only the
    centering ceiling as a number and the flags as a list without a number?
-3. **Sync**: should saved checks sync to your Supabase account? They include small photos; today they stay on the
-   device and in the backup file.
+3. **Sync**: answered, they sync (run migration 0003; see `docs/HANDOFF.md`).
 4. **Guided camera on your phone**: does the preview feel useful, or is the camera app plus the retake prompts
    enough? (On an iPhone only the latter exists.)
 5. **Several photos**: is three the right maximum, and should a second photo be suggested by default?

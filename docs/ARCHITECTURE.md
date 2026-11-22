@@ -10,8 +10,8 @@ Supabase (owner-only sync + price history), Recharts, Zod, Vitest. Hosted on Ver
 ## Principles
 - **Local-first.** IndexedDB (Dexie) is the source of truth for the collection. The app is fully usable
   with no account and no Supabase env vars ("guest mode"). Guest data never leaves the browser.
-- **Owner sync.** When Supabase env vars exist and the owner signs in, entries/binders sync to Supabase
-  (last-write-wins on `updatedAt`, tombstones via `deletedAt`). Sign-ups are disabled in the Supabase
+- **Owner sync.** When Supabase env vars exist and the owner signs in, entries, binders and saved grading
+  checks (assessments) sync to Supabase (last-write-wins on `updatedAt`, tombstones via `deletedAt`). Sign-ups are disabled in the Supabase
   dashboard, so only the owner account exists.
 - **Card data** comes from TCGdex (`https://api.tcgdex.net/v2/en`), always via our own `/api/*` routes so
   Vercel's CDN caches responses (TCGdex sends `no-store`). Never call TCGdex from client components.
@@ -32,7 +32,7 @@ Supabase (owner-only sync + price history), Recharts, Zod, Vitest. Hosted on Ver
 - **Search** splits a query into a name and a card number (`src/lib/search-query.ts`): "Zorua 189", "#189",
   "189/159", "TG05".
 - **Centering and grading tool** (`/centering`): a pure-TS engine in `src/lib/centering/` run in a Web Worker;
-  photos never leave the device. See "Grading tool" below and `docs/proposals/GRADING_V2.md`.
+  photos never leave the device (a saved check's small thumbnails sync with it when signed in). See "Grading tool" below and `docs/proposals/GRADING_V2.md`.
   It reports ceilings and flags, never a predicted grade; surface is always "not assessed".
 - Images: TCGdex asset base URL + `/{quality}.webp` where quality is `low` or `high`.
   Use plain `<img loading="lazy">` (not next/image) to stay inside Vercel Hobby image-optimisation quota.
@@ -83,7 +83,7 @@ formatMoney(amount: number, currency: Currency): string   // Intl, en-CA
 // tables: entries (CollectionEntry, indexes: id, cardId, setId, serieId, updatedAt), binders (Binder),
 //         settings (single row key "settings"), cardCache (CardDetail + cachedAt, for offline pricing),
 //         assessments (GradingAssessment, indexes: id, cardId, entryId, createdAt, updatedAt; schema v2,
-//         local only: never synced)
+//         synced like entries: tombstones via deletedAt, hidden from hooks and the backup)
 useEntries(): CollectionEntry[] | undefined          // live, excludes tombstones
 useEntry(id: string): CollectionEntry | undefined
 useBinders(): Binder[] | undefined
@@ -95,19 +95,24 @@ createBinder(name: string, description?: string): Promise<Binder>
 updateBinder(id: string, patch: Partial<Binder>): Promise<void>
 removeBinder(id: string): Promise<void>               // tombstone + remove id from entries
 updateSettings(patch: Partial<Settings>): Promise<void>
-exportCollection(): Promise<string>                   // JSON string {version:1, entries, binders, settings, assessments}
+exportCollection(): Promise<string>                   // JSON string {version:1, entries, binders, settings, assessments} (live rows only)
 importCollection(json: string, mode: "merge" | "replace"): Promise<{ entries: number; binders: number; assessments?: number }>
   // `assessments` is an extra key of the same version-1 file: older backups (without it) still import and
   // leave the local grading log alone; older app versions ignore the key.
 // saved grading checks (src/lib/db/assessments.ts):
-useAssessments(cardId?: string): GradingAssessment[] | undefined   // newest first
+useAssessments(cardId?: string): GradingAssessment[] | undefined   // newest first, excludes tombstones
 saveAssessment(input: NewAssessment): Promise<GradingAssessment>
 updateAssessment(id, patch: { cardName?, entryId?, notes? }): Promise<void>
 recordActualGrade(id, actual: ActualGrade | null): Promise<void>   // the grade PSA returned; rejects 9.5
-deleteAssessment(id): Promise<void>                                // hard delete (nothing to sync)
+deleteAssessment(id): Promise<void>                                // tombstone (photos, notes, grade dropped)
 accuracySummary(rows): AccuracySummary                             // how the ceilings compared with returned grades
 // raw access for the sync engine:
-db, getChangedSince(iso: string), applyRemote(entries: CollectionEntry[], binders: Binder[])
+db, getChangedSince(iso: string, assessmentsIso = iso) -> { entries, binders, assessments }   // tombstones included
+applyRemote(entries, binders, assessments = []) -> { entries, binders, assessments }        // LWW, ties keep local
+parseAssessment(raw): GradingAssessment | null       // validates a pulled row
+shrinkForSync(row, reencode?, budget = SYNC_ROW_BUDGET (180 KB)) // src/lib/db/assessment-size.ts: the copy to push,
+  // images re-encoded smaller (canvas JPEG 320/240/160 px, q 0.7..0.5) and, last resort, dropped (largest crop
+  // first, then back thumbnail, then front). The local row is never changed.
 ```
 
 `src/lib/collection.ts` (pure, unit tested):
@@ -145,11 +150,17 @@ Tests: `accuracy*`, `hard-*`, `scans`, `detect`, `mask`, `compute`, `psa` (phase
 ### Sync + history layer (owner: sync agent)
 - `supabase/migrations/0001_init.sql` — tables `entries`, `binders` (jsonb `data` + `updated_at`, `deleted_at`,
   `user_id` default `auth.uid()`, RLS: owner rows only), `price_snapshots` (public read, service-role write),
-  `fx_rates`. 
+  `fx_rates`.
+- `supabase/migrations/0003_grading_assessments.sql` — table `grading_assessments` (same shape and RLS as
+  `entries`, plus `card_id`, `entry_id`, `created_at` copied from `data` by the RPC) and `push_grading_assessments(rows)`.
+  The engine syncs assessments as a separate, later phase with its own cursors (`assessPush`/`assessPull`): if the
+  table or RPC is missing (`isMissingRelationError`: PGRST205/PGRST202/42P01/42883) it warns once in the console
+  and skips, entries/binders sync as before, and everything is pushed once 0003 has run. Assessment rows travel in
+  batches of 20 (push) and pages of 50 (pull).
 - `src/lib/supabase/client.ts`, `server.ts` — `@supabase/ssr` clients; `isSupabaseConfigured()`.
 - `src/lib/sync/` — `useAuth()` `{ user, signInWithEmail(email) (magic link / OTP), signOut }`,
   `syncNow(): Promise<{ pushed: number; pulled: number }>`, `useSync()` `{ status, lastSyncedAt, syncNow }`
-  (auto-sync on sign-in, on change (debounced), on focus).
+  (auto-sync on sign-in, on change to entries/binders/assessments (debounced), on focus).
 - `/api/history/[cardId]` → `{ snapshots: PriceSnapshot[] }` (empty when Supabase not configured).
 - `/api/cron/snapshot` — protected by `CRON_SECRET` (Vercel sends `Authorization: Bearer <CRON_SECRET>`);
   reads distinct cardIds+variants from all `entries`, fetches TCGdex via `src/lib/tcgdex`, upserts today's

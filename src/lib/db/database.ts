@@ -21,7 +21,7 @@ export class MimiBinderDB extends Dexie {
   binders!: EntityTable<Binder, "id">;
   settings!: EntityTable<SettingsRow, "key">;
   cardCache!: EntityTable<CachedCard, "id">;
-  /** Saved grading assessments (centering tool). Local only: never synced. Added in schema version 2. */
+  /** Saved grading assessments (centering tool). Synced when signed in (tombstones via deletedAt). Added in schema version 2. */
   assessments!: EntityTable<GradingAssessment, "id">;
 
   constructor(name = "mimibinder") {

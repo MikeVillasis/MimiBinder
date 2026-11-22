@@ -6,24 +6,35 @@
 //       copies, then handed to `applyRemote`.
 // Concurrency: one sync at a time per browser (Web Locks across tabs, a promise mutex within a tab).
 // Cursors live in localStorage per user id, read inside the lock so tabs never use stale values.
+//
+// Grading assessments sync the same way (table `grading_assessments`, RPC `push_grading_assessments`, migration
+// 0003) but as a separate, later phase with their own cursors: if the owner has not run 0003 yet, that phase is
+// skipped with a console warning, its cursors stay put (so everything is pushed once the table exists), and
+// entries/binders sync exactly as before. Rows are shrunk under SYNC_ROW_BUDGET before they are pushed.
 
-import { applyRemote, db, getChangedSince } from "@/lib/db";
+import { applyRemote, db, getChangedSince, parseAssessment, shrinkForSync, type GradingAssessment } from "@/lib/db";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Binder, CollectionEntry } from "@/lib/types";
 import {
   chunk,
   fromRemoteRow,
+  isMissingRelationError,
   maxSyncedAt,
   pullLowerBound,
   selectLocalChanges,
   selectRemoteWinners,
   toPushRow,
   type RemoteRow,
+  type SupabaseErrorLike,
 } from "./merge";
 
 const EPOCH = "1970-01-01T00:00:00.000Z";
 const PUSH_CHUNK = 500;
 const PAGE_SIZE = 1000;
+/** Assessment rows can be up to ~180 KB each (thumbnails), so they travel in much smaller batches. */
+const ASSESSMENT_PUSH_CHUNK = 20;
+const ASSESSMENT_PAGE_SIZE = 50;
+const ASSESSMENTS_TABLE = "grading_assessments";
 /** Re-push window to cover writes that committed while we were reading local changes. */
 const PUSH_OVERLAP_MS = 2_000;
 /** Re-pull window to cover server transactions that committed out of order. */
@@ -39,6 +50,8 @@ interface Cursors {
   push: string | null; // client clock (updatedAt)
   pull: string | null; // server clock (synced_at)
   last: string | null; // when the last successful sync finished
+  assessPush: string | null; // like push/pull, for grading assessments (held back while the table is missing)
+  assessPull: string | null;
 }
 
 const cursorKey = (userId: string) => `mimibinder:sync:${userId}`;
@@ -48,12 +61,12 @@ export function readCursors(userId: string): Cursors {
     const raw = localStorage.getItem(cursorKey(userId));
     if (raw) {
       const c = JSON.parse(raw) as Partial<Cursors>;
-      return { push: c.push ?? null, pull: c.pull ?? null, last: c.last ?? null };
+      return { push: c.push ?? null, pull: c.pull ?? null, last: c.last ?? null, assessPush: c.assessPush ?? null, assessPull: c.assessPull ?? null };
     }
   } catch {
     // storage unavailable or corrupt: start fresh (a full sync is always safe)
   }
-  return { push: null, pull: null, last: null };
+  return { push: null, pull: null, last: null, assessPush: null, assessPull: null };
 }
 
 function writeCursors(userId: string, c: Cursors) {
@@ -124,7 +137,7 @@ async function runSyncOnce(): Promise<SyncResult> {
 
   // ---- push ----
   const startedAt = Date.now();
-  const changed = await getChangedSince(cursors.push ?? EPOCH);
+  const changed = await getChangedSince(cursors.push ?? EPOCH, cursors.assessPush ?? EPOCH);
   const localEntries = selectLocalChanges<CollectionEntry>(changed.entries, cursors.push);
   const localBinders = selectLocalChanges<Binder>(changed.binders, cursors.push);
   let pushed = 0;
@@ -167,8 +180,74 @@ async function runSyncOnce(): Promise<SyncResult> {
   }
 
   const pullCursor = maxSyncedAt([...binderRows, ...entryRows], cursors.pull);
-  writeCursors(userId, { push: pushCursor, pull: pullCursor, last: new Date().toISOString() });
-  return { pushed, pulled };
+  const done: Cursors = { ...cursors, push: pushCursor, pull: pullCursor, last: new Date().toISOString() };
+  writeCursors(userId, done);
+
+  // ---- grading assessments (separate phase: never holds back entries/binders) ----
+  const a = await syncAssessments(supabase, userId, changed.assessments, done, startedAt);
+  if (a) writeCursors(userId, { ...done, assessPush: a.pushCursor, assessPull: a.pullCursor });
+  return { pushed: pushed + (a?.pushed ?? 0), pulled: pulled + (a?.pulled ?? 0) };
+}
+
+type Client = NonNullable<ReturnType<typeof getSupabaseBrowserClient>>;
+
+/** A failed Supabase call, keeping the PostgREST error so callers can tell "table missing" apart. */
+class RemoteError extends Error {
+  constructor(
+    message: string,
+    readonly remote: SupabaseErrorLike,
+  ) {
+    super(message);
+    this.name = "RemoteError";
+  }
+}
+
+let warnedMissingAssessments = false;
+
+/**
+ * Push then pull grading assessments. Returns null (and warns once per page load) when the remote table or RPC
+ * does not exist yet, i.e. migration 0003 has not been run; any other error is thrown.
+ */
+async function syncAssessments(
+  supabase: Client,
+  userId: string,
+  changedRows: GradingAssessment[],
+  cursors: Cursors,
+  startedAt: number,
+): Promise<{ pushed: number; pulled: number; pushCursor: string; pullCursor: string | null } | null> {
+  try {
+    const local = selectLocalChanges<GradingAssessment>(changedRows, cursors.assessPush);
+    let pushed = 0;
+    for (const part of chunk(local, ASSESSMENT_PUSH_CHUNK)) {
+      const rows = await Promise.all(part.map(async (r) => toPushRow(await shrinkForSync(r))));
+      const { data, error } = await supabase.rpc("push_grading_assessments", { rows });
+      if (error) throw new RemoteError(`Push grading checks failed: ${error.message}`, error);
+      pushed += typeof data === "number" ? data : 0;
+    }
+    const pushCursor = new Date(startedAt - PUSH_OVERLAP_MS).toISOString();
+
+    const remoteRows = await pullTable(supabase, ASSESSMENTS_TABLE, userId, pullLowerBound(cursors.assessPull, PULL_OVERLAP_MS), ASSESSMENT_PAGE_SIZE);
+    const remote = remoteRows
+      .map((r) => fromRemoteRow<GradingAssessment>(r))
+      .map((r) => (r ? parseAssessment(r) : null))
+      .filter((r): r is GradingAssessment => r !== null);
+    const localCopies = await db.assessments.bulkGet(remote.map((r) => r.id));
+    const winners = selectRemoteWinners(remote, toMap<GradingAssessment>(localCopies));
+    let pulled = 0;
+    if (winners.length > 0) pulled = (await applyRemote([], [], winners)).assessments;
+    return { pushed, pulled, pushCursor, pullCursor: maxSyncedAt(remoteRows, cursors.assessPull) };
+  } catch (err) {
+    if (err instanceof RemoteError && isMissingRelationError(err.remote)) {
+      if (!warnedMissingAssessments) {
+        warnedMissingAssessments = true;
+        console.warn(
+          "MimiBinder sync: grading checks are not synced yet because the Supabase table is missing. Run supabase/migrations/0003_grading_assessments.sql in the Supabase SQL editor. Entries and binders sync normally.",
+        );
+      }
+      return null;
+    }
+    throw err;
+  }
 }
 
 function toMap<T extends { id: string }>(items: readonly (T | undefined)[]): Map<string, T> {
@@ -178,13 +257,14 @@ function toMap<T extends { id: string }>(items: readonly (T | undefined)[]): Map
 }
 
 async function pullTable(
-  supabase: NonNullable<ReturnType<typeof getSupabaseBrowserClient>>,
-  table: "entries" | "binders",
+  supabase: Client,
+  table: "entries" | "binders" | typeof ASSESSMENTS_TABLE,
   userId: string,
   since: string | null,
+  pageSize = PAGE_SIZE,
 ): Promise<RemoteRow[]> {
   const rows: RemoteRow[] = [];
-  for (let from = 0; ; from += PAGE_SIZE) {
+  for (let from = 0; ; from += pageSize) {
     let q = supabase
       .from(table)
       .select("id, data, updated_at, deleted_at, synced_at")
@@ -193,17 +273,17 @@ async function pullTable(
     const { data, error } = await q
       .order("synced_at", { ascending: true })
       .order("id", { ascending: true })
-      .range(from, from + PAGE_SIZE - 1);
-    if (error) throw new Error(`Pull ${table} failed: ${error.message}`);
+      .range(from, from + pageSize - 1);
+    if (error) throw new RemoteError(`Pull ${table} failed: ${error.message}`, error);
     const page = (data ?? []) as RemoteRow[];
     rows.push(...page);
-    if (page.length < PAGE_SIZE) break;
+    if (page.length < pageSize) break;
   }
   return rows;
 }
 
 /** Names of Dexie tables whose mutations should trigger an auto-sync. */
-export const SYNCED_TABLES = ["entries", "binders"] as const;
+export const SYNCED_TABLES = ["entries", "binders", "assessments"] as const;
 
 /** Dexie database name, for matching `storagemutated` parts. */
 export function syncedDbName(): string {

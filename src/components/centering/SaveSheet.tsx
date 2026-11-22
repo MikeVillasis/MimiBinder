@@ -14,7 +14,7 @@ export interface SaveCard {
   detail?: string;
 }
 
-/** Save the current check to the local grading log, optionally linked to an owned copy. */
+/** Save the current check to the grading log (synced when signed in), optionally linked to an owned copy. */
 export function SaveSheet({
   open,
   onClose,
@@ -75,7 +75,7 @@ function Form({ onClose, front, back, verdict, frontFullArt, card, onSaved }: Om
       }}
     >
       <p className="text-sm text-muted">
-        Keeps the ratios, flags and ceiling on this device. When the card comes back from PSA, record its grade in the log: over time that shows how well these checks hold up for you.
+        Keeps the ratios, flags and ceiling in your grading log, which syncs to your account when you are signed in. When the card comes back from PSA, record its grade in the log: over time that shows how well these checks hold up for you.
       </p>
       <Field label="Card" hint={card ? undefined : "A name so you can find it later."}>
         <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Charizard ex, 151 #199" maxLength={120} />
@@ -100,7 +100,7 @@ function Form({ onClose, front, back, verdict, frontFullArt, card, onSaved }: Om
         <input type="checkbox" checked={photos} onChange={(e) => setPhotos(e.target.checked)} className="h-5 w-5 accent-[var(--color-accent)]" />
         <span>
           Keep small photos with it
-          <span className="block text-[13px] text-muted">Thumbnails of the card and the flagged spots. They stay on this device and in your backup file.</span>
+          <span className="block text-[13px] text-muted">Thumbnails of the card and the flagged spots. They are kept with the check: in your backup file and, when you are signed in, in your synced account.</span>
         </span>
       </label>
       {error && (

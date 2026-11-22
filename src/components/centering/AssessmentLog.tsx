@@ -201,7 +201,7 @@ function LogRow({ row, onGrade, onDelete }: { row: GradingAssessment; onGrade: (
   );
 }
 
-/** Saved checks on this device, with the returned PSA grade once recorded. `cardId` narrows it to one card. */
+/** Saved checks (synced when signed in), with the returned PSA grade once recorded. `cardId` narrows it to one card. */
 export function AssessmentLog({ cardId }: { cardId?: string }) {
   const all = useAssessments();
   const [showAll, setShowAll] = useState(false);
@@ -216,10 +216,10 @@ export function AssessmentLog({ cardId }: { cardId?: string }) {
         <h2 id="log-h" className="text-lg font-semibold tracking-tight">
           Grading log
         </h2>
-        <Badge>On this device only</Badge>
+        <Badge>Syncs when signed in</Badge>
       </div>
       <p className="mt-1 text-[13px] text-muted">
-        Checks you saved. They are included in your backup file (Settings) and are not synced.
+        Checks you saved. They sync to your account when you are signed in, and are included in your backup file (Settings).
       </p>
       <div className="mt-3">
         <Accuracy rows={all} />
@@ -246,7 +246,7 @@ export function AssessmentLog({ cardId }: { cardId?: string }) {
       <ConfirmDialog
         open={!!deleting}
         title="Delete this saved check?"
-        body={`${deleting?.cardName || "This check"} and its photos will be removed from this device.${deleting?.actual ? " Its returned grade goes with it." : ""}`}
+        body={`${deleting?.cardName || "This check"} and its photos will be removed from this device and, once it syncs, from your account.${deleting?.actual ? " Its returned grade goes with it." : ""}`}
         confirmLabel="Delete"
         danger
         onClose={() => setDeleting(null)}

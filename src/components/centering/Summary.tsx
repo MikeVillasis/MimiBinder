@@ -245,7 +245,7 @@ export function Summary({
       <p className="mt-2 min-h-5 text-[13px] text-muted" role="status" aria-live="polite">
         {savedId ? (
           <>
-            Saved to your grading log on this device.{" "}
+            Saved to your grading log (it syncs when you are signed in).{" "}
             <a href="#grading-log" className="font-medium text-accent underline-offset-2 hover:underline">
               See the log
             </a>{" "}

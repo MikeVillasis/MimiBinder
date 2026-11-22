@@ -7,12 +7,16 @@ export {
   ASSESSMENT_ENGINE_VERSION,
   deleteAssessment,
   isPsaGrade,
+  parseAssessment,
   PSA_GRADES,
   PSA_QUALIFIERS,
   recordActualGrade,
   saveAssessment,
+  tombstoneOf,
   updateAssessment,
 } from "./assessments";
+export { assessmentBytes, dropImagesToFit, shrinkForSync, SYNC_ROW_BUDGET } from "./assessment-size";
+export type { Reencode } from "./assessment-size";
 export type { AccuracySummary, ActualGrade, GradingAssessment, NewAssessment, SavedFace, SavedFlag } from "./assessments";
 export {
   addEntry,
