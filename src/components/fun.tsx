@@ -51,6 +51,7 @@ export function HoloCard({
     el.style.setProperty("--holo-x", `${(px * r.width).toFixed(1)}px`);
     el.style.setProperty("--holo-y", `${(py * r.height).toFixed(1)}px`);
     el.style.setProperty("--holo-p", px.toFixed(3));
+    el.setAttribute("data-tilt", "");
     el.setAttribute("data-active", "");
   };
 

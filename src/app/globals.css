@@ -337,7 +337,8 @@ body {
   );
 }
 @media (hover: hover) and (pointer: fine) {
-  .holo {
+  /* data-tilt is set on the first mouse move and stays, so untouched tiles carry no transform at all. */
+  .holo[data-tilt] {
     transform: perspective(720px) rotateX(var(--holo-rx, 0deg)) rotateY(var(--holo-ry, 0deg));
     transition: transform 260ms var(--ease-out-ui);
   }
