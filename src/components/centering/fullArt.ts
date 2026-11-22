@@ -11,7 +11,7 @@ export interface FullArtCard {
 
 const NAME = /illustration rare|hyper rare|secret|rainbow|ultra rare|full art|shiny ultra|shiny rare v|black white rare|amazing rare/i;
 // Japanese rarity codes, as a whole word ("SAR", not "SARA").
-const CODE = /(^|[^A-Za-z])(SAR|SR|AR|HR|UR|CHR|CSR|SSR|ACE)([^A-Za-z]|$)/;
+const CODE = /(^|[^A-Za-z])(SAR|SR|AR|HR|UR|CHR|CSR|SSR)([^A-Za-z]|$)/;
 
 /** Why the card looks full art (for the one-line explanation), or null when nothing says so. */
 export function fullArtReason(card: FullArtCard | null | undefined): string | null {
