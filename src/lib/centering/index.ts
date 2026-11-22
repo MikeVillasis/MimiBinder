@@ -8,7 +8,7 @@
 // (`rotateQuad`) and re-warp.
 import type { BorderFit, CenteringResult, DetectResult, Face, Quad, RGBAImage, WarpResult } from "./types";
 import { downscale as downscaleImpl } from "./image";
-import { detectCard as detectImpl } from "./detect";
+import { detectCard as detectImpl, type DetectOptions } from "./detect";
 import { warpCard as warpImpl } from "./warp";
 import { measureBorders as measureImpl } from "./measure";
 import { computeCentering as computeImpl } from "./compute";
@@ -20,7 +20,8 @@ export { scaleQuad } from "./geometry";
 export { canvasQuad, canvasToImage, DEFAULT_MARGIN_MM, DEFAULT_PX_PER_MM } from "./warp";
 export { measureSide, type SideMeasurement } from "./measure";
 export { CORNER_ZONE_MM } from "./compute";
-export { orderPortrait } from "./detect";
+export { orderPortrait, type DetectOptions } from "./detect";
+export { backgroundMask, quadCoverage, quadIoU, type BackgroundMask } from "./mask";
 
 /** Downscale for detection (long edge ≤ maxEdge), box-filtered. Returns the image and the scale (small/original). */
 export function downscale(img: RGBAImage, maxEdge = 1600): { image: RGBAImage; scale: number } {
@@ -31,8 +32,8 @@ export function downscale(img: RGBAImage, maxEdge = 1600): { image: RGBAImage; s
  * Find the card in a photo: fits straight lines to the four cut edges and intersects them. Null if not found.
  * Corners are TL, TR, BR, BL of the card held portrait (smallest rotation; see the note at the top of this file).
  */
-export function detectCard(img: RGBAImage): DetectResult | null {
-  return detectImpl(img);
+export function detectCard(img: RGBAImage, opts?: DetectOptions): DetectResult | null {
+  return detectImpl(img, opts);
 }
 
 /** Perspective-correct the card to a portrait canvas of CARD_MM at `pxPerMm`, plus a margin of `marginMm`. */
@@ -70,10 +71,10 @@ export interface PhotoAnalysis {
 export function analyzePhoto(
   img: RGBAImage,
   face: Face,
-  opts?: { pxPerMm?: number; marginMm?: number; maxDetectEdge?: number },
+  opts?: { pxPerMm?: number; marginMm?: number; maxDetectEdge?: number; backgroundFilter?: boolean },
 ): PhotoAnalysis | null {
   const { image, scale } = downscaleImpl(img, opts?.maxDetectEdge ?? 1600);
-  const detect = detectImpl(image);
+  const detect = detectImpl(image, { backgroundFilter: opts?.backgroundFilter });
   if (!detect) return null;
   const quad = scaleQuad(detect.quad, 1 / scale);
   const warp = warpImpl(img, quad, opts);

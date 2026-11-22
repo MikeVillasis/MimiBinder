@@ -249,7 +249,13 @@ export interface PhotoSpec {
   tiltYDeg: number;
   /** Fraction of the photo's limiting dimension the card's bounding box spans. */
   fill: number;
-  background: "wood" | "desk" | "dark";
+  background: Background;
+  /** Objects on the table next to the card (drawn under the card). */
+  distractors?: Distractor[] | ((quad: Quad, rng: () => number) => Distractor[]);
+  /** Soft drop shadow of the card on the table: offset and softness in px, opacity 0..1. */
+  shadow?: { dx: number; dy: number; soft: number; opacity: number };
+  /** Card placement: random (default), or flush against a photo edge (corner `gapPx` from it). */
+  placement?: { touch: "left" | "right" | "top" | "bottom"; gapPx: number };
   blurSigma: number;
   noiseSigma: number;
   vignette?: number;
@@ -257,6 +263,54 @@ export interface PhotoSpec {
   seed: number;
   /** Supersampling per axis (2 = 4 samples per pixel). */
   ss?: number;
+}
+
+export type Background = "wood" | "desk" | "dark" | "woodStrong" | "cloth" | "white" | "grey" | "beige";
+
+/** Table clutter, in photo pixels. Shapes are drawn with hard edges (worst case for line detection). */
+export type Distractor =
+  /** Everything beyond the line through p with outward normal n is `color` (a table edge, a wall, a floor). */
+  | { kind: "halfplane"; p: Point; n: Point; color: [number, number, number] }
+  /** A rotated rectangle (phone, book, another card), optional rounded corners and a 1-colour border. */
+  | { kind: "rect"; c: Point; w: number; h: number; angDeg: number; r: number; color: [number, number, number]; rim?: [number, number, number]; rimPx?: number }
+  | { kind: "ellipse"; c: Point; rx: number; ry: number; angDeg: number; color: [number, number, number] };
+
+function distractorColor(ds: Distractor[], x: number, y: number, out: number[]): boolean {
+  let hit = false;
+  for (const d of ds) {
+    if (d.kind === "halfplane") {
+      if ((x - d.p.x) * d.n.x + (y - d.p.y) * d.n.y > 0) { out[0] = d.color[0]; out[1] = d.color[1]; out[2] = d.color[2]; hit = true; }
+      continue;
+    }
+    const a = (d.angDeg * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
+    const u = (x - d.c.x) * ca + (y - d.c.y) * sa, v = -(x - d.c.x) * sa + (y - d.c.y) * ca;
+    if (d.kind === "ellipse") {
+      if ((u / d.rx) ** 2 + (v / d.ry) ** 2 <= 1) { out[0] = d.color[0]; out[1] = d.color[1]; out[2] = d.color[2]; hit = true; }
+      continue;
+    }
+    const hw = d.w / 2, hh = d.h / 2;
+    const qx = Math.abs(u) - (hw - d.r), qy = Math.abs(v) - (hh - d.r);
+    const sd = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - d.r;
+    if (sd <= 0) {
+      const col = d.rim && sd > -(d.rimPx ?? 0) ? d.rim : d.color;
+      out[0] = col[0]; out[1] = col[1]; out[2] = col[2]; hit = true;
+    }
+  }
+  return hit;
+}
+
+/** Signed distance from p to a convex polygon (negative inside). */
+function polyDist(q: Point[], x: number, y: number): number {
+  let inside = true, best = Infinity;
+  const sgn = Math.sign((q[1].x - q[0].x) * (q[2].y - q[1].y) - (q[1].y - q[0].y) * (q[2].x - q[1].x)) || 1;
+  for (let i = 0; i < q.length; i++) {
+    const a = q[i], b = q[(i + 1) % q.length];
+    const ex = b.x - a.x, ey = b.y - a.y, l2 = ex * ex + ey * ey;
+    const t = Math.max(0, Math.min(1, ((x - a.x) * ex + (y - a.y) * ey) / l2));
+    best = Math.min(best, Math.hypot(x - a.x - ex * t, y - a.y - ey * t));
+    if (sgn * (ex * (y - a.y) - ey * (x - a.x)) < 0) inside = false;
+  }
+  return inside ? -best : best;
 }
 
 export interface SynthPhoto {
@@ -286,7 +340,14 @@ export function makePhoto(card: CardSource, spec: PhotoSpec): SynthPhoto {
   const minY = Math.min(...corners3.map((p) => p.y)), maxY = Math.max(...corners3.map((p) => p.y));
   const s = Math.min((spec.fill * W) / (maxX - minX), (spec.fill * Ht) / (maxY - minY));
   const bw = (maxX - minX) * s, bh = (maxY - minY) * s;
-  const ox = (W - bw) * (0.2 + 0.6 * rng()) - minX * s, oy = (Ht - bh) * (0.2 + 0.6 * rng()) - minY * s;
+  let ox = (W - bw) * (0.2 + 0.6 * rng()) - minX * s, oy = (Ht - bh) * (0.2 + 0.6 * rng()) - minY * s;
+  if (spec.placement) {
+    const g = spec.placement.gapPx;
+    if (spec.placement.touch === "left") ox = g - minX * s;
+    else if (spec.placement.touch === "right") ox = W - g - bw - minX * s;
+    else if (spec.placement.touch === "top") oy = g - minY * s;
+    else oy = Ht - g - bh - minY * s;
+  }
   const quad = corners3.map((p) => ({ x: p.x * s + ox, y: p.y * s + oy })) as Quad;
   const H = homographyFrom4(
     [{ x: 0, y: 0 }, { x: CARD_MM.width, y: 0 }, { x: CARD_MM.width, y: CARD_MM.height }, { x: 0, y: CARD_MM.height }],
@@ -304,6 +365,30 @@ export function makePhoto(card: CardSource, spec: PhotoSpec): SynthPhoto {
       const grain = 0.5 + 0.5 * Math.sin((v + 25 * bgN(u / 120, v / 40)) / 7);
       const k = 0.75 + 0.25 * grain + 0.1 * (bgN2(x / 300, y / 300) - 0.5);
       out[0] = 150 * k; out[1] = 98 * k; out[2] = 55 * k;
+    } else if (spec.background === "woodStrong") {
+      // High-contrast, fairly straight planks and grain.
+      const u = x * gc + y * gs, v = -x * gs + y * gc;
+      const grain = 0.5 + 0.5 * Math.sin((v + 6 * bgN(u / 300, v / 60)) / 4.5);
+      const plank = Math.floor(v / 260);
+      const tone = 0.8 + 0.35 * ((plank * 0.618) % 1);
+      const seam = Math.abs(((v % 260) + 260) % 260 - 2) < 3 ? 0.35 : 1;
+      const k = tone * (0.55 + 0.45 * grain) * seam;
+      out[0] = 165 * k; out[1] = 105 * k; out[2] = 58 * k;
+    } else if (spec.background === "cloth") {
+      // Busy plaid with flowers: many colours, many straight stripes.
+      const u = x * gc + y * gs, v = -x * gs + y * gc;
+      const sx = Math.sin(u / 9) > 0.55 ? 1 : 0, sy = Math.sin(v / 13) > 0.4 ? 1 : 0;
+      const cell = (Math.floor(u / 70) + Math.floor(v / 70)) & 1;
+      let r = cell ? 170 : 60, g = cell ? 40 : 90, b = cell ? 50 : 150;
+      if (sx) { r = r * 0.5 + 240 * 0.5; g = g * 0.5 + 220 * 0.5; b = b * 0.5 + 120 * 0.5; }
+      if (sy) { r *= 0.6; g *= 0.6; b *= 0.6; }
+      const fl = bgN(x / 25, y / 25);
+      if (fl > 0.78) { r = 250; g = 245; b = 235; } else if (fl < 0.18) { r = 40; g = 150; b = 70; }
+      out[0] = r; out[1] = g; out[2] = b;
+    } else if (spec.background === "white" || spec.background === "grey" || spec.background === "beige") {
+      const base = spec.background === "white" ? [236, 236, 233] : spec.background === "grey" ? [178, 180, 184] : [228, 206, 158];
+      const k = 1 + 0.05 * (bgN(x / 220, y / 220) - 0.5) + 0.03 * (bgN2(x / 5, y / 5) - 0.5);
+      out[0] = base[0] * k; out[1] = base[1] * k; out[2] = base[2] * k;
     } else if (spec.background === "desk") {
       const k = 1 + 0.12 * (bgN(x / 200, y / 200) - 0.5) + 0.06 * (bgN2(x / 6, y / 6) - 0.5);
       out[0] = 78 * k; out[1] = 80 * k; out[2] = 86 * k;
@@ -319,10 +404,19 @@ export function makePhoto(card: CardSource, spec: PhotoSpec): SynthPhoto {
   const G = 4, gw = Math.ceil(W / G) + 2, gh = Math.ceil(Ht / G) + 2;
   const bgGrid = new Float32Array(gw * gh * 3);
   const tmp = [0, 0, 0];
+  const shQuad = spec.shadow ? quad.map((p) => ({ x: p.x + spec.shadow!.dx, y: p.y + spec.shadow!.dy })) : null;
   for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
     bg(i * G, j * G, tmp);
+    if (shQuad) {
+      const d = polyDist(shQuad, i * G, j * G) / spec.shadow!.soft;
+      const t = d <= -1 ? 1 : d >= 1 ? 0 : 0.5 - 0.5 * Math.sin((d * Math.PI) / 2);
+      const k = 1 - spec.shadow!.opacity * t;
+      tmp[0] *= k; tmp[1] *= k; tmp[2] *= k;
+    }
     bgGrid.set(tmp, (j * gw + i) * 3);
   }
+  const ds = typeof spec.distractors === "function" ? spec.distractors(quad, mulberry32(spec.seed * 31 + 7)) : (spec.distractors ?? []);
+  const dcol = [0, 0, 0];
   const bgAt = (x: number, y: number, out: number[]) => {
     const fx = x / G, fy = y / G, i = Math.floor(fx), j = Math.floor(fy), ax = fx - i, ay = fy - j;
     for (let c = 0; c < 3; c++) {
@@ -336,6 +430,7 @@ export function makePhoto(card: CardSource, spec: PhotoSpec): SynthPhoto {
   for (let y = 0; y < Ht; y++) {
     for (let x = 0; x < W; x++) {
       bgAt(x + 0.5, y + 0.5, bgc);
+      if (ds.length && distractorColor(ds, x + 0.5, y + 0.5, dcol)) { bgc[0] = dcol[0]; bgc[1] = dcol[1]; bgc[2] = dcol[2]; }
       let r = bgc[0], g = bgc[1], b = bgc[2];
       if (x >= bx0 && x < bx1 && y >= by0 && y < by1) {
         const px = x + 0.5, py = y + 0.5;
