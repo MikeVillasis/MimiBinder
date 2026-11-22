@@ -47,8 +47,12 @@ export function warpCard(img: RGBAImage, quad: Quad, opts?: { pxPerMm?: number; 
     let Z = h6 * 0.5 + h7 * v + h8;
     let o = y * W * 4;
     for (let x = 0; x < W; x++, o += 4, X += h0, Y += h3, Z += h6) {
-      const fx = X / Z - 0.5, fy = Y / Z - 0.5;
-      if (!(fx > -1 && fy > -1 && fx < sw && fy < sh)) { out[o + 3] = 255; continue; }
+      // Outside the photo, replicate its edge pixels: a black fill would put a false "cut edge" in the margin
+      // when the card touches the photo border.
+      let fx = X / Z - 0.5, fy = Y / Z - 0.5;
+      if (!(fx === fx && fy === fy)) { out[o + 3] = 255; continue; }
+      fx = fx < 0 ? 0 : fx > sw - 1 ? sw - 1 : fx;
+      fy = fy < 0 ? 0 : fy > sh - 1 ? sh - 1 : fy;
       let x0 = Math.floor(fx), y0 = Math.floor(fy);
       let ax = fx - x0, ay = fy - y0;
       if (x0 < 0) { x0 = 0; ax = 0; } else if (x0 >= sw - 1) { x0 = sw - 2; ax = 1; }

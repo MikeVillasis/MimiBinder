@@ -15,6 +15,7 @@
 import type { DetectResult, Point, Quad, RGBAImage } from "./types";
 import { downscale, gaussianBlur, sampleRGB, toRGBFloat } from "./image";
 import { dist, intersect, isConvex, quadArea, robustLine, type NLine } from "./geometry";
+import { backgroundMask, quadCoverage, quadIoU } from "./mask";
 
 const CARD_ASPECT = 63 / 88;
 const DEG = Math.PI / 180;
@@ -82,7 +83,7 @@ interface HLine extends NLine {
   votes: number;
 }
 
-function hough(g: Grad): HLine[] {
+function hough(g: Grad, allow?: Uint8Array): HLine[] {
   const { w, h, edge, ang } = g;
   const NT = 360; // 0.5° bins over [0, π)
   const diag = Math.ceil(Math.hypot(w, h));
@@ -94,7 +95,7 @@ function hough(g: Grad): HLine[] {
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
-      if (!edge[i]) continue;
+      if (!edge[i] || (allow && !allow[i])) continue;
       const tb = Math.round((ang[i] / Math.PI) * NT);
       // Strong edges count more (up to 3x): the cut edge against the background usually out-contrasts texture.
       const wgt = Math.sqrt(Math.min(9, g.mag[i] / g.thr));
@@ -247,8 +248,18 @@ function aspectOf(q: Point[]): { aspect: number; oppRatio: number } {
   return { aspect: Math.min(A, B) / Math.max(A, B), oppRatio: opp };
 }
 
-function findQuadCoarse(g: Grad): Cand | null {
-  const lines = hough(g);
+interface CoarseResult {
+  pick: Cand;
+  cands: Cand[];
+  quality: (c: Cand) => number;
+}
+
+/**
+ * `allow` restricts Hough voting to some edge pixels. With `maskEvidence`, the border-strip test is advisory:
+ * a busy table can fail it, and the background mask already says where the card is.
+ */
+function findQuadCoarse(g: Grad, allow?: Uint8Array, maskEvidence = false): CoarseResult | null {
+  const lines = hough(g, allow);
   const W = g.w, H = g.h;
   const minDim = Math.min(W, H);
   const pairs: [HLine, HLine][] = [];
@@ -287,8 +298,11 @@ function findQuadCoarse(g: Grad): Cand | null {
       let minS = 1;
       for (let s = 0; s < 4 && minS >= 0.45; s++) minS = Math.min(minS, sideSupport(g, quad[s], quad[(s + 1) % 4]));
       if (minS < 0.45) continue;
-      const strip = stripScore(g, quad);
-      if (strip <= 0) continue;
+      let strip = stripScore(g, quad);
+      if (strip <= 0) {
+        if (!maskEvidence) continue;
+        strip = 0.05;
+      }
       cands.push({ quad, support: minS, strip, area, aspect });
     }
   }
@@ -307,7 +321,7 @@ function findQuadCoarse(g: Grad): Cand | null {
       if (!pick.quad.every((p) => insideConvex(c.quad, p, 2))) continue;
       if (!next || quality(c) > quality(next)) next = c;
     }
-    if (!next) return pick;
+    if (!next) return { pick, cands, quality };
     pick = next;
   }
 }
@@ -423,18 +437,34 @@ export function orderPortrait(pts: Point[]): Quad {
   return best ?? (q as Quad);
 }
 
-/** Find the card in a photo: fits straight lines to the four cut edges and intersects them. Null if not found. */
-export function detectCard(img: RGBAImage): DetectResult | null {
-  if (img.width < 32 || img.height < 32) return null;
-  const { image: coarse, scale: cs } = downscale(img, 800);
-  const g = colourGradient(coarse);
-  const cand = findQuadCoarse(g);
-  if (!cand) return null;
-  let quad = cand.quad.map((p) => ({ x: p.x / cs, y: p.y / cs }));
+/** Edge pixels within `band` px of the quad's outline (the cut edge seen by the background mask). */
+function bandAround(g: Grad, q: Point[], band: number): Uint8Array {
+  const allow = new Uint8Array(g.w * g.h);
+  const xs = q.map((p) => p.x), ys = q.map((p) => p.y);
+  const x0 = Math.max(0, Math.floor(Math.min(...xs) - band)), x1 = Math.min(g.w - 1, Math.ceil(Math.max(...xs) + band));
+  const y0 = Math.max(0, Math.floor(Math.min(...ys) - band)), y1 = Math.min(g.h - 1, Math.ceil(Math.max(...ys) + band));
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const px = x + 0.5, py = y + 0.5;
+      let d = Infinity;
+      for (let i = 0; i < 4; i++) {
+        const a = q[i], b = q[(i + 1) % 4];
+        const ex = b.x - a.x, ey = b.y - a.y, l2 = ex * ex + ey * ey;
+        const t = Math.max(0, Math.min(1, ((px - a.x) * ex + (py - a.y) * ey) / l2));
+        d = Math.min(d, Math.hypot(px - a.x - ex * t, py - a.y - ey * t));
+      }
+      if (d <= band) allow[y * g.w + x] = 1;
+    }
+  }
+  return allow;
+}
+
+/** Sub-pixel refinement of a rough quad on the detection image: one wide pass, then a narrow one. */
+function refineQuad(img: RGBAImage, start: Point[], firstWin: number): { quad: Point[]; fits: SideFit[] } | null {
+  let quad = start.slice();
   if (quadArea(quad) < 0) quad = [quad[0], quad[3], quad[2], quad[1]];
   let fits: SideFit[] = [];
-  const passes = [Math.max(4, 2.5 / cs), 3];
-  for (const halfWin of passes) {
+  for (const halfWin of [firstWin, 3]) {
     const cx = (quad[0].x + quad[1].x + quad[2].x + quad[3].x) / 4, cy = (quad[0].y + quad[1].y + quad[2].y + quad[3].y) / 4;
     fits = [];
     for (let s = 0; s < 4; s++) {
@@ -458,12 +488,103 @@ export function detectCard(img: RGBAImage): DetectResult | null {
   if (!isConvex(quad)) return null;
   const { aspect, oppRatio } = aspectOf(quad);
   if (aspect < 0.56 || aspect > 0.88 || oppRatio < 0.65) return null;
+  return { quad, fits };
+}
+
+/** Options for detectCard (tests and diagnostics). */
+export interface DetectOptions {
+  /** Use the background-removal pre-filter (default true). */
+  backgroundFilter?: boolean;
+}
+
+/**
+ * Find the card in a photo: fits straight lines to the four cut edges and intersects them. Null if not found.
+ *
+ * Background pre-filter (mask.ts): the table is modelled from the photo's frame and the card segmented. The mask
+ * never sets corners; it only arbitrates. If the plain line-based pick agrees with the mask (IoU ≥ 0.92) nothing
+ * changes. Otherwise the Hough search is re-run on edge pixels in a band around the mask's outline (which drops the
+ * printed inner frame and table lines away from the card), and the candidate matching the mask best is taken if
+ * it clearly beats the plain pick. Only when no line-based candidate matches and the plain pick disagrees badly
+ * does the mask's own rough quad seed the refinement. An unreliable mask (card filling or crossing the frame,
+ * non-rectangular blob) is ignored.
+ */
+export function detectCard(img: RGBAImage, opts?: DetectOptions): DetectResult | null {
+  if (img.width < 32 || img.height < 32) return null;
+  const { image: coarse, scale: cs } = downscale(img, 800);
+  const g = colourGradient(coarse);
+  const base = findQuadCoarse(g);
+  let cand: Cand | null = base?.pick ?? null;
+  const firstWin = Math.max(4, 2.5 / cs);
+  let maskQuad: Point[] | null = null, maskSeed: Cand | null = null, maskScale = 1;
+  if (opts?.backgroundFilter !== false) {
+    const bm = backgroundMask(coarse);
+    if (bm) {
+      maskQuad = bm.quad;
+      maskScale = bm.scale;
+      // The mask can lose a border that matches the table (silver on white, the strip's own colours), so it may
+      // be smaller than the card but never much larger. A pick is suspicious only if it fails to cover (95%) the mask
+      // (e.g. it is the printed inner frame, or a quad elsewhere) or is mostly outside it (table lines).
+      const cover = cand ? quadCoverage(bm.quad, cand.quad) : 0;
+      const inside = cand ? quadCoverage(cand.quad, bm.quad) : 0;
+      const short = Math.min(...[0, 1, 2, 3].map((i) => dist(bm.quad[i], bm.quad[(i + 1) % 4])));
+      if (cover < 0.95 || inside < 0.6) {
+        const banded = findQuadCoarse(g, bandAround(g, bm.quad, Math.max(4, 0.025 * short)), bm.reliability >= 0.8);
+        const baseQ = base ? base.quality(base.pick) : 0;
+        let best: Cand | null = null, bestIoU = 0;
+        for (const res of [banded, base]) {
+          if (!res) continue;
+          const top = Math.max(...res.cands.map(res.quality));
+          for (const c of res.cands) {
+            // Must contain the mask and be mostly card; the best match to the mask wins (the pick was suspicious
+            // because the mask reaches beyond it, so here the mask shows the whole card). A busy table
+            // drags the border-strip score down, so with a clean mask the quality floor is low.
+            const cov = quadCoverage(bm.quad, c.quad);
+            if (cov < 0.95 || quadCoverage(c.quad, bm.quad) < 0.75) continue;
+            const floor = cov >= 0.97 && bm.reliability >= 0.8 ? 0.1 * baseQ : Math.max(0.3 * top, 0.5 * baseQ);
+            if (res.quality(c) < floor) continue;
+            const iou = quadIoU(c.quad, bm.quad);
+            if (iou > bestIoU) { best = c; bestIoU = iou; }
+          }
+        }
+        if (best) cand = best;
+        else if ((!cand || cover < 0.5) && bm.reliability > 0.3) {
+          // Nothing line-based agrees: seed the refinement from the mask's quad (kept only if it refines well).
+          const q = bm.quad;
+          maskSeed = { quad: q, support: 0.6, strip: stripScore(g, q), area: Math.abs(quadArea(q)), aspect: aspectOf(q).aspect };
+        }
+      }
+    }
+  }
+  const toImg = (q: Point[]) => q.map((p) => ({ x: p.x / cs, y: p.y / cs }));
+  let refined = cand ? refineQuad(img, toImg(cand.quad), firstWin) : null;
+  if (!refined && base && cand !== base.pick) {
+    cand = base.pick;
+    refined = refineQuad(img, toImg(cand.quad), firstWin);
+  }
+  if (maskSeed && maskQuad) {
+    // Run both and keep whichever is better: the mask-seeded fit must cover the mask and fit its edges about as
+    // well as the plain one.
+    const alt = refineQuad(img, toImg(maskSeed.quad), Math.max(6, 3 / (maskScale * cs)));
+    if (alt) {
+      const fitQ = (r: { fits: SideFit[] }) => Math.min(...r.fits.map((f) => f.inlierFrac / (1 + (f.rms / 0.8) ** 2)));
+      const covAlt = quadCoverage(maskQuad, alt.quad.map((p) => ({ x: p.x * cs, y: p.y * cs })));
+      const covRef = refined ? quadCoverage(maskQuad, refined.quad.map((p) => ({ x: p.x * cs, y: p.y * cs }))) : 0;
+      if (!refined || (covAlt > covRef + 0.05 && covAlt > 0.9 && fitQ(alt) >= 0.8 * fitQ(refined))) {
+        refined = alt;
+        cand = maskSeed;
+      }
+    }
+  }
+  if (!refined || !cand) return null;
+  const { quad, fits } = refined;
+  const { aspect } = aspectOf(quad);
   // Confidence: worst side's inlier share and residual, damped by the aspect-ratio deviation.
   let conf = 1;
   for (const f of fits) conf = Math.min(conf, f.inlierFrac * (1 / (1 + (f.rms / 0.8) ** 2)));
   const aspDev = Math.abs(aspect - CARD_ASPECT) / CARD_ASPECT;
   conf *= Math.max(0, 1 - Math.max(0, aspDev - 0.05) * 4);
   conf *= Math.min(1, cand.support / 0.8);
+  // A result that does not contain the background mask lowers confidence (the UI asks the user to check).
+  if (maskQuad) conf *= Math.min(1, 0.5 + 0.5 * quadCoverage(maskQuad, quad.map((p) => ({ x: p.x * cs, y: p.y * cs }))) / 0.95);
   return { quad: orderPortrait(quad), confidence: Math.max(0, Math.min(1, conf)) };
 }
-
