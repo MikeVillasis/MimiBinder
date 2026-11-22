@@ -2,6 +2,8 @@
 //
 // Pipeline: downscale → detectCard (on the small image) → scaleQuad back to the original → warpCard (from the
 // original pixels) → measureBorders → computeCentering → psaCeiling. `analyzePhoto` runs all of it.
+// Phase 2 adds assessCondition (corner and edge flags on the warp), photoQuality (retake reasons),
+// combineCentering / combineCondition (several photos of one face) and borderProfile (set-aware notes).
 //
 // Orientation: detectCard returns corners for a portrait card using the smallest rotation that makes it portrait.
 // A card lying sideways (≈90°) or upside down is ambiguous, so the UI should offer a rotate button
@@ -17,11 +19,18 @@ import { scaleQuad } from "./geometry";
 export * from "./types";
 export * from "./psa";
 export { scaleQuad } from "./geometry";
-export { canvasQuad, canvasToImage, DEFAULT_MARGIN_MM, DEFAULT_PX_PER_MM } from "./warp";
+export { canvasQuad, canvasToImage, warpRegion, DEFAULT_MARGIN_MM, DEFAULT_PX_PER_MM } from "./warp";
 export { measureSide, type SideMeasurement } from "./measure";
 export { CORNER_ZONE_MM } from "./compute";
 export { orderPortrait, type DetectOptions } from "./detect";
 export { backgroundMask, quadCoverage, quadIoU, type BackgroundMask } from "./mask";
+export {
+  assessCondition, ceilingFromCounts, conditionCeiling, defectLabel, zoneLabel, zoneSeverity, CONDITION_THRESHOLDS, ZONES,
+  type ConditionCeiling, type ConditionDebug, type ConditionReport, type CornerId, type Defect, type DefectKind, type Rect, type Severity, type SkipReason, type ZoneFinding, type ZoneId,
+} from "./condition";
+export { frameQuality, photoQuality, QUALITY_LIMITS, type FrameQuality, type PhotoQuality, type QualityIssue } from "./quality";
+export { combineCentering, combineCondition, MAX_SHOT_SPREAD, type CombinedCentering, type CombinedCondition, type CombinedZone } from "./combine";
+export { borderProfile, looksFullArt, type BorderProfile, type CardRef } from "./era";
 
 /** Downscale for detection (long edge ≤ maxEdge), box-filtered. Returns the image and the scale (small/original). */
 export function downscale(img: RGBAImage, maxEdge = 1600): { image: RGBAImage; scale: number } {

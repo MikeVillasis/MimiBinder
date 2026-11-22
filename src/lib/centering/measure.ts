@@ -317,6 +317,7 @@ export function measureBorders(warp: WarpResult, face: Face): BorderFit {
     outer: { left: res.left.outer, right: res.right.outer, top: res.top.outer, bottom: res.bottom.outer },
     inner: { left: res.left.inner, right: res.right.inner, top: res.top.inner, bottom: res.bottom.inner },
     quality: { left: res.left.quality, right: res.right.quality, top: res.top.quality, bottom: res.bottom.quality },
+    innerQuality: { left: res.left.innerQuality, right: res.right.innerQuality, top: res.top.innerQuality, bottom: res.bottom.innerQuality },
     pxPerMm: warp.pxPerMm,
   };
 }
