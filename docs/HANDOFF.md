@@ -24,15 +24,10 @@ MimiBinder is a free, non-commercial, MIT-licensed Pokémon TCG collection and p
 - The owner is in Canada (CAD is the default currency), collects English cards only, and wants clear, friendly explanations.
 
 ## Open items (priority order)
-1. **Next card-inspired theme.** Follow the Spatial Rift (Palkia) pattern:
-   - Extract the art's main colours (k-means over the art area).
-   - Define a palette whose text passes WCAG AA contrast.
-   - Add tokens under `:root[data-theme="<id>"]` in `src/app/globals.css`. Keep surfaces slightly translucent so the shader shows through.
-   - Register the theme in `src/lib/themes/registry.ts` with the card name, set, number and illustrator credit.
-   - Write an original procedural WebGL1 shader in `src/components/theme/shaders/<id>.ts` and register it in `shaders/index.ts`. It should evoke the art's colours and drawing patterns without reproducing the artwork or the Pokémon. Keep motion calm and contrast low, cap at 30fps, and keep DPR at 1.5 or below.
-2. **Minor design fixes:**
-   - Show owned secret rares in the dashboard's set progress.
-   - Fill the logo gap for the newest sets with the set symbol or initials.
-   - Raise 11px labels to at least 12px.
-3. **PSA grading phase 1:** in-browser centering measurement from phone photos, following the research report's pipeline (worst-point measurement, homography, sub-pixel edges).
-4. **Real-phone check:** the Spatial Rift shader hasn't been tested on a real phone. Ask the owner how smooth it feels and how it affects battery.
+1. **Real-phone check:** ask the owner how the Spatial Rift and Star Requiem shaders feel (smoothness, battery), and whether the card inspector's pinch, twist and two-finger move work, the hold opens it without the native "save image" menu (iOS and Android), and the flick-spin friction feels right (`CardInspector.tsx`).
+2. **PSA grading phase 1:** in-browser centering measurement from phone photos, following the research report's pipeline (worst-point measurement, homography, sub-pixel edges).
+3. **More card-inspired themes:** follow the Spatial Rift (Palkia) and Star Requiem (Giratina) pattern: k-means palette, WCAG AA tokens in `globals.css`, registry entry with credit, original WebGL1 shader (≤30fps, DPR ≤1.5).
+4. **Japanese cards follow-ups:** the JP badge sits over the name strip on full-art images; consider a smaller badge. Many Japanese cards (all of the newest Mega sets) have no TCGdex image yet.
+
+## Testing in the cloud
+The "MimiBinder" cloud environment allows `api.tcgdex.net`, `assets.tcgdex.net` and `www.bankofcanada.ca`. Start the production server with `NODE_USE_ENV_PROXY=1 npx next start` so server-side fetches go through the proxy. Run `npm run build` before `npm run typecheck` on a fresh clone (it generates `PageProps`/`LayoutProps`).

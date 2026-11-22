@@ -3,16 +3,20 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { cardImage } from "@/lib/pricing";
+import { CardBack } from "./CardBack";
 
 /**
- * Full-screen card inspector. Open it from anywhere with `openCardInspector({ image, name })`;
+ * Full-screen 3D card inspector. Open it from anywhere with `openCardInspector({ image, name })`;
  * a single <CardInspector /> mounted in AppShell listens for the event and renders through a portal.
  *
- * Gestures (pointer events, all state in refs, transform written in requestAnimationFrame):
- * - one pointer drag: move (clamped so part of the card stays on screen), with a 3D tilt toward the motion
- * - two pointers: pinch to zoom (0.6–4x), twist to rotate, centroid moves the card
- * - wheel: zoom; Shift+wheel: rotate
- * - double tap / double click: reset
+ * Orientation is a quaternion. Drag deltas are applied as rotations about the SCREEN axes
+ * (pre-multiplied), so turning stays natural even when the card is flipped or upside down.
+ * - one finger / left mouse drag: turn (horizontal → screen Y axis, vertical → screen X axis), with inertia
+ * - two fingers: pinch to zoom (0.6–4x), twist to roll (screen Z axis), centroid moves the card
+ * - right-drag or Alt+drag (mouse): move; wheel: zoom; Shift+wheel: roll
+ * - double tap / double click: reset; toolbar: Flip (180° about Y), Reset, Close
+ * All gesture state lives in refs; the transform is written in requestAnimationFrame, and the loop
+ * stops when nothing is animating.
  */
 
 export type InspectCard = { image?: string; name: string };
@@ -20,18 +24,17 @@ export type InspectCard = { image?: string; name: string };
 const OPEN_EVENT = "mimibinder:inspect-card";
 const MIN_SCALE = 0.6;
 const MAX_SCALE = 4;
-const MAX_TILT = 9; // degrees
 const DOUBLE_TAP_MS = 320;
+const FLIP_MS = 500;
+const RESET_MS = 380;
+const SPIN_FRICTION = 0.9975; // velocity kept per ms (~280 ms half-life)
+const SPIN_MIN = 0.00015; // rad/ms
+const THICKNESS_LAYERS = [-0.5, 0, 0.5]; // px; faces sit at ±1px
 
 export function openCardInspector(card: InspectCard) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent<InspectCard>(OPEN_EVENT, { detail: card }));
 }
-
-type Pt = { x: number; y: number };
-type View = { x: number; y: number; rot: number; scale: number };
-
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 export function CardInspector() {
   const [card, setCard] = useState<InspectCard | null>(null);
@@ -54,117 +57,202 @@ export function CardInspector() {
   return createPortal(<InspectorOverlay key={openId} card={card} onClose={close} />, document.body);
 }
 
+// ---------- quaternion helpers: [w, x, y, z] ----------
+type Quat = [number, number, number, number];
+const Q_ID: Quat = [1, 0, 0, 0];
+
+function qMul(a: Quat, b: Quat): Quat {
+  const [aw, ax, ay, az] = a;
+  const [bw, bx, by, bz] = b;
+  return [
+    aw * bw - ax * bx - ay * by - az * bz,
+    aw * bx + ax * bw + ay * bz - az * by,
+    aw * by - ax * bz + ay * bw + az * bx,
+    aw * bz + ax * by - ay * bx + az * bw,
+  ];
+}
+function qNorm(q: Quat): Quat {
+  const l = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
+  return [q[0] / l, q[1] / l, q[2] / l, q[3] / l];
+}
+/** Rotation by |(ax, ay, az)| radians about that vector (screen axes: x right, y down, z toward viewer). */
+function qFromRotVec(ax: number, ay: number, az: number): Quat {
+  const angle = Math.hypot(ax, ay, az);
+  if (angle < 1e-9) return Q_ID;
+  const s = Math.sin(angle / 2) / angle;
+  return [Math.cos(angle / 2), ax * s, ay * s, az * s];
+}
+/** Apply a screen-space rotation on top of the current orientation. */
+const qRotate = (q: Quat, ax: number, ay: number, az: number) => qNorm(qMul(qFromRotVec(ax, ay, az), q));
+function qSlerp(a: Quat, b: Quat, t: number): Quat {
+  let dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+  let bb = b;
+  if (dot < 0) {
+    dot = -dot;
+    bb = [-b[0], -b[1], -b[2], -b[3]];
+  }
+  if (dot > 0.9995) return qNorm([a[0] + (bb[0] - a[0]) * t, a[1] + (bb[1] - a[1]) * t, a[2] + (bb[2] - a[2]) * t, a[3] + (bb[3] - a[3]) * t]);
+  const th = Math.acos(dot);
+  const s = Math.sin(th);
+  const wa = Math.sin((1 - t) * th) / s;
+  const wb = Math.sin(t * th) / s;
+  return [a[0] * wa + bb[0] * wb, a[1] * wa + bb[1] * wb, a[2] * wa + bb[2] * wb, a[3] * wa + bb[3] * wb];
+}
+/** Row-major 3x3 rotation matrix (same convention as CSS rotate3d). */
+function qMatrix([w, x, y, z]: Quat) {
+  return [
+    1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y),
+    2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x),
+    2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y),
+  ];
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const f = (n: number) => (Math.abs(n) < 1e-6 ? "0" : n.toFixed(5));
+
+// Light from the upper left, in front of the card; H is the half-vector with the viewer (0,0,1).
+const LIGHT = (() => {
+  const l = [-0.35, -0.55, 1];
+  const ll = Math.hypot(l[0], l[1], l[2]);
+  const L = l.map((v) => v / ll);
+  const h = [L[0], L[1], L[2] + 1];
+  const hl = Math.hypot(h[0], h[1], h[2]);
+  return { L, H: h.map((v) => v / hl) };
+})();
+
+type Pt = { x: number; y: number };
+type Pose = { q: Quat; x: number; y: number; scale: number };
+type Tween = { t0: number; dur: number; from: Pose; to: Pose };
+
 function InspectorOverlay({ card, onClose }: { card: InspectCard; onClose: () => void }) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const sheenRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const frontGlare = useRef<HTMLDivElement>(null);
+  const frontShade = useRef<HTMLDivElement>(null);
+  const backGlare = useRef<HTMLDivElement>(null);
+  const backShade = useRef<HTMLDivElement>(null);
 
-  const view = useRef<View>({ x: 0, y: 0, rot: 0, scale: 1 });
-  // Tilt is a damped spring toward `target` (driven by drag velocity, 0 when idle).
-  const tilt = useRef({ x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0 });
+  const pose = useRef<Pose>({ q: Q_ID, x: 0, y: 0, scale: 1 });
+  const spin = useRef({ x: 0, y: 0 }); // angular velocity about screen X / Y, rad/ms
+  const tween = useRef<Tween | null>(null);
   const pointers = useRef(new Map<number, Pt>());
-  const gesture = useRef<{
-    start: View;
-    // one pointer
-    origin?: Pt;
-    // two pointers
-    dist?: number;
-    angle?: number;
-    centroid?: Pt;
-  } | null>(null);
-  const lastMove = useRef<{ x: number; y: number; t: number } | null>(null);
-  const tap = useRef<{ x: number; y: number; t: number; moved: boolean }>({ x: 0, y: 0, t: 0, moved: false });
+  const mode = useRef<"turn" | "move" | "pinch" | null>(null);
+  const pinch = useRef<{ dist: number; angle: number; c: Pt } | null>(null);
+  const lastMoveT = useRef(0);
+  const pinched = useRef(false);
+  const tap = useRef<{ x: number; y: number; moved: boolean }>({ x: 0, y: 0, moved: false });
   const lastTap = useRef<{ x: number; y: number; t: number } | null>(null);
   const frame = useRef(0);
+  const lastFrameT = useRef(0);
   const reduced = useRef(false);
 
   const [hiLoaded, setHiLoaded] = useState(false);
   const [hiFailed, setHiFailed] = useState(false);
+  const [lowFailed, setLowFailed] = useState(false);
   const low = cardImage(card.image, "low");
   const high = cardImage(card.image, "high");
 
   const write = useCallback(() => {
     const el = cardRef.current;
     if (!el) return;
-    const v = view.current;
-    const t = tilt.current;
-    const tx = reduced.current ? 0 : t.x;
-    const ty = reduced.current ? 0 : t.y;
+    const p = pose.current;
+    const m = qMatrix(p.q);
+    // CSS matrix3d is column-major.
     el.style.transform =
-      `translate3d(${v.x.toFixed(1)}px, ${v.y.toFixed(1)}px, 0) perspective(1000px) ` +
-      `rotateX(${tx.toFixed(2)}deg) rotateY(${ty.toFixed(2)}deg) rotate(${v.rot.toFixed(2)}deg) scale(${v.scale.toFixed(3)})`;
-    const sheen = sheenRef.current;
-    if (sheen && !reduced.current) {
-      // Light moves opposite the tilt; stronger when tilted.
-      sheen.style.backgroundPosition = `${50 - ty * 4}% ${50 + tx * 4}%`;
-      sheen.style.opacity = String(0.18 + Math.min(1, (Math.abs(tx) + Math.abs(ty)) / MAX_TILT) * 0.5);
-    }
+      `translate3d(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px, 0) scale(${p.scale.toFixed(4)}) ` +
+      `matrix3d(${f(m[0])},${f(m[3])},${f(m[6])},0,${f(m[1])},${f(m[4])},${f(m[7])},0,${f(m[2])},${f(m[5])},${f(m[8])},0,0,0,0,1)`;
+
+    // Lighting from the face normals (front = +Z column, back = −Z).
+    const { L, H } = LIGHT;
+    const light = (n: number[], glare: HTMLDivElement | null, shade: HTMLDivElement | null, mirror: number) => {
+      const diffuse = Math.max(0, n[0] * L[0] + n[1] * L[1] + n[2] * L[2]);
+      if (shade) shade.style.opacity = ((1 - diffuse) * 0.6).toFixed(3);
+      if (glare) {
+        const spec = Math.pow(Math.max(0, n[0] * H[0] + n[1] * H[1] + n[2] * H[2]), 6);
+        glare.style.opacity = (0.12 + spec * 0.7).toFixed(3);
+        glare.style.backgroundPosition = `${(50 + mirror * (n[0] - H[0]) * 160).toFixed(1)}% ${(50 + (n[1] - H[1]) * 160).toFixed(1)}%`;
+      }
+    };
+    const n = [m[2], m[5], m[8]];
+    light(n, frontGlare.current, frontShade.current, 1);
+    light([-n[0], -n[1], -n[2]], backGlare.current, backShade.current, -1);
   }, []);
 
+  const clampPose = useCallback(() => {
+    const el = cardRef.current;
+    const p = pose.current;
+    p.scale = clamp(p.scale, MIN_SCALE, MAX_SCALE);
+    if (!el) return;
+    const w = (el.offsetWidth * p.scale) / 2;
+    const h = (el.offsetHeight * p.scale) / 2;
+    const maxX = window.innerWidth / 2 + w - Math.min(72, w);
+    const maxY = window.innerHeight / 2 + h - Math.min(72, h);
+    p.x = clamp(p.x, -maxX, maxX);
+    p.y = clamp(p.y, -maxY, maxY);
+  }, []);
+
+  /** Request one frame; the loop keeps itself alive only while tweening or spinning. */
   const schedule = useCallback(() => {
     if (frame.current) return;
-    const step = () => {
+    const step = (now: number) => {
       frame.current = 0;
-      const t = tilt.current;
-      if (pointers.current.size === 0) {
-        t.tx = 0;
-        t.ty = 0;
-      } else {
-        // Velocity-driven target fades out if the pointer stops.
-        t.tx *= 0.88;
-        t.ty *= 0.88;
+      const dt = clamp(now - (lastFrameT.current || now), 0, 50);
+      lastFrameT.current = now;
+      let busy = false;
+      const tw = tween.current;
+      const s = spin.current;
+      if (tw) {
+        const t = clamp((now - tw.t0) / tw.dur, 0, 1);
+        const e = easeInOut(t);
+        pose.current = {
+          q: qSlerp(tw.from.q, tw.to.q, e),
+          x: tw.from.x + (tw.to.x - tw.from.x) * e,
+          y: tw.from.y + (tw.to.y - tw.from.y) * e,
+          scale: tw.from.scale + (tw.to.scale - tw.from.scale) * e,
+        };
+        if (t >= 1) {
+          pose.current = { ...tw.to };
+          tween.current = null;
+        } else busy = true;
+      } else if (pointers.current.size === 0 && (s.x || s.y)) {
+        pose.current.q = qRotate(pose.current.q, s.x * dt, s.y * dt, 0);
+        const k = Math.pow(SPIN_FRICTION, dt);
+        s.x *= k;
+        s.y *= k;
+        if (Math.hypot(s.x, s.y) < SPIN_MIN) s.x = s.y = 0;
+        else busy = true;
       }
-      // Damped spring toward the target: a small overshoot when released.
-      t.vx = (t.vx + (t.tx - t.x) * 0.18) * 0.72;
-      t.vy = (t.vy + (t.ty - t.y) * 0.18) * 0.72;
-      t.x += t.vx;
-      t.y += t.vy;
-      const settled =
-        Math.abs(t.x) + Math.abs(t.y) + Math.abs(t.vx) + Math.abs(t.vy) + Math.abs(t.tx) + Math.abs(t.ty) < 0.02;
-      if (settled) t.x = t.y = t.vx = t.vy = 0;
       write();
-      if (!settled && !reduced.current) frame.current = requestAnimationFrame(step);
+      if (busy) frame.current = requestAnimationFrame(step);
+      else lastFrameT.current = 0;
     };
     frame.current = requestAnimationFrame(step);
   }, [write]);
 
-  const setTransition = useCallback((on: boolean) => {
-    const el = cardRef.current;
-    if (el) el.style.transition = on && !reduced.current ? "transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1)" : "none";
-  }, []);
-
-  const clampView = useCallback(() => {
-    const el = cardRef.current;
-    const v = view.current;
-    v.scale = clamp(v.scale, MIN_SCALE, MAX_SCALE);
-    if (!el) return;
-    const w = (el.offsetWidth * v.scale) / 2;
-    const h = (el.offsetHeight * v.scale) / 2;
-    const keepX = Math.min(72, w);
-    const keepY = Math.min(72, h);
-    const maxX = window.innerWidth / 2 + w - keepX;
-    const maxY = window.innerHeight / 2 + h - keepY;
-    v.x = clamp(v.x, -maxX, maxX);
-    v.y = clamp(v.y, -maxY, maxY);
-  }, []);
-
-  const reset = useCallback(() => {
-    setTransition(true);
-    view.current = { x: 0, y: 0, rot: 0, scale: 1 };
-    schedule();
-  }, [schedule, setTransition]);
-
-  const rotateBy = useCallback(
-    (deg: number) => {
-      setTransition(true);
-      const v = view.current;
-      v.rot = Math.round(v.rot / 90) * 90 + deg;
+  const animateTo = useCallback(
+    (to: Pose, dur: number) => {
+      spin.current = { x: 0, y: 0 };
+      if (reduced.current) {
+        tween.current = null;
+        pose.current = to;
+        schedule();
+        return;
+      }
+      tween.current = { t0: performance.now(), dur, from: { ...pose.current }, to };
       schedule();
     },
-    [schedule, setTransition],
+    [schedule],
   );
+
+  const reset = useCallback(() => animateTo({ q: Q_ID, x: 0, y: 0, scale: 1 }, RESET_MS), [animateTo]);
+  const flip = useCallback(() => {
+    // Finish any running tween first so repeated taps add up to whole half-turns.
+    const base = tween.current ? tween.current.to : pose.current;
+    animateTo({ ...base, q: qRotate(base.q, 0, Math.PI, 0) }, FLIP_MS);
+  }, [animateTo]);
 
   // Open: reduced-motion check, scroll lock, focus, Esc + focus trap, wheel.
   useEffect(() => {
@@ -177,6 +265,7 @@ function InspectorOverlay({ card, onClose }: { card: InspectCard; onClose: () =>
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     closeRef.current?.focus({ preventScroll: true });
+    write();
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -189,10 +278,11 @@ function InspectorOverlay({ card, onClose }: { card: InspectCard; onClose: () =>
         if (!items.length) return;
         const first = items[0];
         const last = items[items.length - 1];
-        if (e.shiftKey && (document.activeElement === first || !dialogRef.current.contains(document.activeElement))) {
+        const inside = dialogRef.current.contains(document.activeElement);
+        if (e.shiftKey && (document.activeElement === first || !inside)) {
           e.preventDefault();
           last.focus();
-        } else if (!e.shiftKey && (document.activeElement === last || !dialogRef.current.contains(document.activeElement))) {
+        } else if (!e.shiftKey && (document.activeElement === last || !inside)) {
           e.preventDefault();
           first.focus();
         }
@@ -203,16 +293,15 @@ function InspectorOverlay({ card, onClose }: { card: InspectCard; onClose: () =>
     const surface = surfaceRef.current;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      setTransition(false);
-      const v = view.current;
+      tween.current = null;
+      const p = pose.current;
       // Shift+wheel is often reported as horizontal scroll.
-      const delta = e.deltaY || e.deltaX;
-      const unit = e.deltaMode === 1 ? 16 : 1;
+      const delta = (e.deltaY || e.deltaX) * (e.deltaMode === 1 ? 16 : 1);
       if (e.shiftKey) {
-        v.rot += delta * unit * 0.15;
+        p.q = qRotate(p.q, 0, 0, delta * 0.0026);
       } else {
-        v.scale *= Math.exp(-delta * unit * 0.0015);
-        clampView();
+        p.scale *= Math.exp(-delta * 0.0015);
+        clampPose();
       }
       schedule();
     };
@@ -226,82 +315,103 @@ function InspectorOverlay({ card, onClose }: { card: InspectCard; onClose: () =>
       if (frame.current) cancelAnimationFrame(frame.current);
       if (prevFocus && prevFocus !== document.body && document.contains(prevFocus)) prevFocus.focus({ preventScroll: true });
     };
-  }, [onClose, schedule, clampView, setTransition]);
+  }, [onClose, schedule, clampPose, write]);
 
-  const beginGesture = () => {
-    const pts = [...pointers.current.values()];
-    const start = { ...view.current };
-    if (pts.length >= 2) {
-      const [a, b] = pts;
-      gesture.current = {
-        start,
-        dist: Math.hypot(b.x - a.x, b.y - a.y) || 1,
-        angle: Math.atan2(b.y - a.y, b.x - a.x),
-        centroid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
-      };
-    } else if (pts.length === 1) {
-      gesture.current = { start, origin: { ...pts[0] } };
-    } else {
-      gesture.current = null;
-    }
+  const startPinch = () => {
+    const [a, b] = [...pointers.current.values()];
+    pinch.current = {
+      dist: Math.hypot(b.x - a.x, b.y - a.y) || 1,
+      angle: Math.atan2(b.y - a.y, b.x - a.x),
+      c: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+    };
   };
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const isMouse = e.pointerType === "mouse";
+    if (isMouse && e.button !== 0 && e.button !== 2) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    setTransition(false);
+    tween.current = null; // the user takes over
+    spin.current = { x: 0, y: 0 };
     if (pointers.current.size === 1) {
-      tap.current = { x: e.clientX, y: e.clientY, t: performance.now(), moved: false };
-      lastMove.current = { x: e.clientX, y: e.clientY, t: performance.now() };
-    } else {
-      tap.current.moved = true; // multi-touch is never a tap
+      pinched.current = false;
+      mode.current = isMouse && (e.button === 2 || e.altKey) ? "move" : "turn";
+      tap.current = { x: e.clientX, y: e.clientY, moved: false };
+      lastMoveT.current = performance.now();
+    } else if (pointers.current.size === 2) {
+      mode.current = "pinch";
+      pinched.current = true;
+      tap.current.moved = true;
+      startPinch();
     }
-    beginGesture();
   };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const p = pointers.current.get(e.pointerId);
-    if (!p) return;
-    p.x = e.clientX;
-    p.y = e.clientY;
+    const pt = pointers.current.get(e.pointerId);
+    if (!pt) return;
+    const dx = e.clientX - pt.x;
+    const dy = e.clientY - pt.y;
+    pt.x = e.clientX;
+    pt.y = e.clientY;
     if (Math.hypot(e.clientX - tap.current.x, e.clientY - tap.current.y) > 10) tap.current.moved = true;
+    const p = pose.current;
 
-    const g = gesture.current;
-    if (!g) return;
-    const v = view.current;
-    const pts = [...pointers.current.values()];
-    if (pts.length >= 2 && g.dist && g.centroid && g.angle != null) {
-      const [a, b] = pts;
+    if (mode.current === "pinch" && pointers.current.size >= 2 && pinch.current) {
+      const [a, b] = [...pointers.current.values()];
       const dist = Math.hypot(b.x - a.x, b.y - a.y) || 1;
       const angle = Math.atan2(b.y - a.y, b.x - a.x);
       const c = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      v.scale = g.start.scale * (dist / g.dist);
-      v.rot = g.start.rot + ((angle - g.angle) * 180) / Math.PI;
-      v.x = g.start.x + (c.x - g.centroid.x);
-      v.y = g.start.y + (c.y - g.centroid.y);
-    } else if (g.origin) {
-      v.x = g.start.x + (e.clientX - g.origin.x);
-      v.y = g.start.y + (e.clientY - g.origin.y);
-      // Tilt toward the direction of motion, from pointer velocity (px/ms).
+      const prev = pinch.current;
+      let dA = angle - prev.angle;
+      if (dA > Math.PI) dA -= 2 * Math.PI;
+      if (dA < -Math.PI) dA += 2 * Math.PI;
+      p.scale *= dist / prev.dist;
+      p.q = qRotate(p.q, 0, 0, dA); // screen Z: positive = clockwise on screen
+      p.x += c.x - prev.c.x;
+      p.y += c.y - prev.c.y;
+      pinch.current = { dist, angle, c };
+      clampPose();
+    } else if (mode.current === "move") {
+      p.x += dx;
+      p.y += dy;
+      clampPose();
+    } else if (mode.current === "turn") {
+      // Dragging about one on-screen card width turns the card half way round.
+      const width = Math.max(160, (cardRef.current?.offsetWidth ?? 320) * p.scale);
+      const k = Math.PI / width;
+      const rx = -dy * k; // drag down → top edge comes toward the viewer
+      const ry = dx * k; // drag right → front face swings right
+      p.q = qRotate(p.q, rx, ry, 0);
       const now = performance.now();
-      const lm = lastMove.current;
-      if (lm && now > lm.t) {
-        const dt = Math.max(8, now - lm.t);
-        const t = tilt.current;
-        t.ty = clamp(((e.clientX - lm.x) / dt) * 7, -MAX_TILT, MAX_TILT);
-        t.tx = clamp(((lm.y - e.clientY) / dt) * 7, -MAX_TILT, MAX_TILT);
-      }
-      lastMove.current = { x: e.clientX, y: e.clientY, t: now };
+      const dt = Math.max(1, now - lastMoveT.current);
+      lastMoveT.current = now;
+      const s = spin.current;
+      s.x = s.x * 0.5 + (rx / dt) * 0.5;
+      s.y = s.y * 0.5 + (ry / dt) * 0.5;
     }
-    clampView();
     schedule();
   };
 
   const onPointerEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!pointers.current.has(e.pointerId)) return;
     pointers.current.delete(e.pointerId);
-    if (pointers.current.size === 0 && e.type === "pointerup" && !tap.current.moved) {
+    const left = pointers.current.size;
+    if (left === 1) {
+      // Lifting one of two fingers: keep moving with the remaining one, don't start turning.
+      mode.current = "move";
+      return;
+    }
+    if (left > 1) {
+      startPinch();
+      return;
+    }
+    // Last pointer up.
+    const wasTurning = mode.current === "turn";
+    mode.current = null;
+    const stale = performance.now() - lastMoveT.current > 80;
+    if (!wasTurning || pinched.current || stale || reduced.current || e.type === "pointercancel") spin.current = { x: 0, y: 0 };
+    if (e.type === "pointerup" && !tap.current.moved) {
+      spin.current = { x: 0, y: 0 };
       const now = performance.now();
       const prev = lastTap.current;
       if (prev && now - prev.t < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < 30) {
@@ -311,14 +421,18 @@ function InspectorOverlay({ card, onClose }: { card: InspectCard; onClose: () =>
       }
       lastTap.current = { x: e.clientX, y: e.clientY, t: now };
     }
-    // Remaining pointer(s) continue from where they are.
-    beginGesture();
-    lastMove.current = null;
     schedule();
   };
 
   const btn =
-    "flex min-h-12 min-w-12 flex-col items-center justify-center gap-0.5 rounded-2xl border border-line bg-surface px-3 text-xs font-semibold text-fg shadow-lg hover:bg-surface-2";
+    "flex min-h-12 min-w-14 flex-col items-center justify-center gap-0.5 rounded-2xl border border-line bg-surface px-3 text-xs font-semibold text-fg shadow-lg hover:bg-surface-2";
+  const face = "absolute inset-0 overflow-hidden rounded-[6%/4.5%] [backface-visibility:hidden] [-webkit-backface-visibility:hidden]";
+  const glareStyle = {
+    backgroundImage:
+      "linear-gradient(115deg, transparent 25%, rgb(255 255 255 / 0.6) 45%, rgb(255 255 255 / 0.15) 55%, transparent 70%)",
+    backgroundSize: "250% 250%",
+    backgroundPosition: "50% 50%",
+  } as const;
 
   return (
     <div
@@ -331,7 +445,7 @@ function InspectorOverlay({ card, onClose }: { card: InspectCard; onClose: () =>
       <div
         ref={surfaceRef}
         className="absolute inset-0 flex touch-none select-none items-center justify-center"
-        style={{ WebkitTouchCallout: "none" }}
+        style={{ WebkitTouchCallout: "none", perspective: "1600px" }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerEnd}
@@ -345,51 +459,63 @@ function InspectorOverlay({ card, onClose }: { card: InspectCard; onClose: () =>
         <div
           ref={cardRef}
           data-testid="card-inspector-card"
-          className="relative aspect-[63/88] overflow-hidden rounded-[6%/4.5%] bg-surface-2 will-change-transform"
-          style={{
-            width: "min(85vw, calc(70dvh * 63 / 88))",
-            boxShadow: "var(--card-shadow), 0 30px 80px -20px rgb(0 0 0 / 0.6)",
-            transform: "translate3d(0, 0, 0)",
-          }}
+          className="relative aspect-[63/88] will-change-transform [transform-style:preserve-3d]"
+          style={{ width: "min(85vw, calc(70dvh * 63 / 88))" }}
         >
-          {low && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={low} alt="" aria-hidden="true" draggable={false} className="absolute inset-0 h-full w-full object-cover" />
-          )}
-          {high && !hiFailed && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={high}
-              alt={card.name}
-              draggable={false}
-              decoding="async"
-              onLoad={() => setHiLoaded(true)}
-              onError={() => setHiFailed(true)}
-              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${hiLoaded ? "opacity-100" : "opacity-0"}`}
+          {/* Edge: a few stacked layers between the faces so the card doesn't vanish edge-on. */}
+          {THICKNESS_LAYERS.map((z) => (
+            <div
+              key={z}
+              aria-hidden="true"
+              className="absolute inset-0 rounded-[6%/4.5%] bg-[#c9ccd3]"
+              style={{ transform: `translateZ(${z}px)` }}
             />
-          )}
-          {!low && (
-            <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-sm text-muted">{card.name}</div>
-          )}
-          {/* Glare: white light blended over the art so holo cards read as shiny. Hidden under reduced motion. */}
-          <div
-            ref={sheenRef}
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 opacity-20 mix-blend-overlay motion-reduce:hidden"
-            style={{
-              backgroundImage:
-                "linear-gradient(115deg, transparent 25%, rgb(255 255 255 / 0.55) 45%, rgb(255 255 255 / 0.15) 55%, transparent 70%)",
-              backgroundSize: "250% 250%",
-              backgroundPosition: "50% 50%",
-            }}
-          />
+          ))}
+
+          {/* Front */}
+          <div className={`${face} bg-surface-2`} style={{ transform: "translateZ(1px)", boxShadow: "var(--card-shadow)" }} data-testid="card-inspector-front">
+            {low && !lowFailed && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={low}
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                onError={() => setLowFailed(true)}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            )}
+            {high && !hiFailed && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={high}
+                alt={card.name}
+                draggable={false}
+                decoding="async"
+                onLoad={() => setHiLoaded(true)}
+                onError={() => setHiFailed(true)}
+                className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${hiLoaded ? "opacity-100" : "opacity-0"}`}
+              />
+            )}
+            {(!low || lowFailed) && (!high || hiFailed || !hiLoaded) && <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-sm text-muted">{card.name}</div>}
+            {/* Lighting: shade darkens faces turned from the light; glare is a specular sheen. */}
+            <div ref={frontShade} aria-hidden="true" className="pointer-events-none absolute inset-0 bg-black opacity-0" />
+            <div ref={frontGlare} aria-hidden="true" className="pointer-events-none absolute inset-0 mix-blend-overlay motion-reduce:hidden" style={glareStyle} />
+          </div>
+
+          {/* Back */}
+          <div className={face} style={{ transform: "rotateY(180deg) translateZ(1px)", boxShadow: "var(--card-shadow)" }} data-testid="card-inspector-back">
+            <CardBack />
+            <div ref={backShade} aria-hidden="true" className="pointer-events-none absolute inset-0 bg-black opacity-0" />
+            <div ref={backGlare} aria-hidden="true" className="pointer-events-none absolute inset-0 mix-blend-overlay motion-reduce:hidden" style={glareStyle} />
+          </div>
         </div>
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)]">
-        <p className="max-w-full rounded-full border border-line bg-surface px-4 py-2 text-center text-xs text-fg shadow-lg">
+        <p className="max-w-full rounded-2xl border border-line bg-surface px-4 py-2 text-center text-xs text-fg shadow-lg">
           <span className="font-bold">{card.name}</span>
-          <span className="text-muted"> · Drag to move · pinch to zoom · twist to turn</span>
+          <span className="text-muted"> · Drag to turn · pinch to zoom · two fingers to move</span>
         </p>
       </div>
 
@@ -398,23 +524,19 @@ function InspectorOverlay({ card, onClose }: { card: InspectCard; onClose: () =>
         aria-label="Card controls"
         className="absolute inset-x-0 bottom-0 flex justify-center gap-2 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
       >
-        <button type="button" className={btn} onClick={() => rotateBy(-90)} aria-label="Rotate left 90 degrees">
+        <button type="button" className={btn} onClick={flip} aria-label="Flip card over">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M3 4v6h6" />
-            <path d="M3.5 15a9 9 0 1 0 2.1-9.4L3 10" />
+            <path d="M12 3v18" strokeDasharray="2 2.5" />
+            <path d="M9 6H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h4" />
+            <path d="M15 6h4a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-4" />
+            <path d="M7 3.5 9 6 7 8.5M17 15.5 15 18l2 2.5" />
           </svg>
-          <span aria-hidden="true">Left</span>
-        </button>
-        <button type="button" className={btn} onClick={() => rotateBy(90)} aria-label="Rotate right 90 degrees">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M21 4v6h-6" />
-            <path d="M20.5 15a9 9 0 1 1-2.1-9.4L21 10" />
-          </svg>
-          <span aria-hidden="true">Right</span>
+          <span aria-hidden="true">Flip</span>
         </button>
         <button type="button" className={btn} onClick={reset} aria-label="Reset position, rotation and zoom">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M4 9V4h5M20 15v5h-5M4 4l6 6M20 20l-6-6" />
+            <path d="M3 4v6h6" />
+            <path d="M3.5 15a9 9 0 1 0 2.1-9.4L3 10" />
           </svg>
           <span aria-hidden="true">Reset</span>
         </button>
@@ -423,7 +545,7 @@ function InspectorOverlay({ card, onClose }: { card: InspectCard; onClose: () =>
           type="button"
           onClick={onClose}
           aria-label="Close inspector"
-          className="flex min-h-12 min-w-12 flex-col items-center justify-center gap-0.5 rounded-2xl bg-accent px-3 text-xs font-bold text-accent-fg shadow-lg hover:opacity-90"
+          className="flex min-h-12 min-w-14 flex-col items-center justify-center gap-0.5 rounded-2xl bg-accent px-3 text-xs font-bold text-accent-fg shadow-lg hover:opacity-90"
         >
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
             <path d="M6 6l12 12M18 6L6 18" />

@@ -14,7 +14,7 @@ const HOLD_SLOP_PX = 10;
  */
 function useHoldToInspect(enabled: boolean, image: string | undefined, name: string) {
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const start = useRef<{ x: number; y: number; id: number; type: string } | null>(null);
+  const start = useRef<{ x: number; y: number; id: number; type: string; t: number } | null>(null);
   const fired = useRef(false);
 
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -25,6 +25,14 @@ function useHoldToInspect(enabled: boolean, image: string | undefined, name: str
     start.current = null;
   };
 
+  const fire = () => {
+    clearTimeout(timer.current);
+    timer.current = undefined;
+    fired.current = true;
+    navigator.vibrate?.(10);
+    openCardInspector({ image, name });
+  };
+
   if (!enabled) return undefined;
 
   return {
@@ -32,20 +40,20 @@ function useHoldToInspect(enabled: boolean, image: string | undefined, name: str
       fired.current = false; // a click never followed the last hold (e.g. Android long-press)
       if (!e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
       cancel();
-      start.current = { x: e.clientX, y: e.clientY, id: e.pointerId, type: e.pointerType };
-      timer.current = setTimeout(() => {
-        timer.current = undefined;
-        fired.current = true;
-        navigator.vibrate?.(10);
-        openCardInspector({ image, name });
-      }, HOLD_MS);
+      start.current = { x: e.clientX, y: e.clientY, id: e.pointerId, type: e.pointerType, t: performance.now() };
+      timer.current = setTimeout(fire, HOLD_MS);
     },
     onPointerMove: (e: ReactPointerEvent<HTMLElement>) => {
       const s = start.current;
       if (!s || s.id !== e.pointerId || !timer.current) return;
       if (Math.hypot(e.clientX - s.x, e.clientY - s.y) > HOLD_SLOP_PX) cancel();
     },
-    onPointerUp: cancel,
+    onPointerUp: () => {
+      // On a busy main thread the hold timer can run late, after the finger lifts: judge by elapsed time.
+      const s = start.current;
+      if (s && timer.current && performance.now() - s.t >= HOLD_MS) fire();
+      cancel();
+    },
     onPointerCancel: cancel,
     onClickCapture: (e: React.MouseEvent<HTMLElement>) => {
       if (!fired.current) return;

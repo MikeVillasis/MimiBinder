@@ -20,6 +20,12 @@ Supabase (owner-only sync + price history), Recharts, Zod, Vitest. Hosted on Ver
   without lead approval).
 - **Price history**: a daily Vercel cron snapshots prices for every card in the owner's collection into
   Supabase `price_snapshots`. History is public, non-personal data.
+- **Languages**: English and Japanese (`Lang` in `types.ts`). English ids are TCGdex ids as-is; Japanese
+  card, set and serie ids carry a `ja:` prefix (`ja:SV2a-001`), so every id-keyed store (entries, card
+  cache, price snapshots, sync) works unchanged. Use `src/lib/lang.ts` (`langOf`, `splitId`, `joinId`);
+  never parse ids by hand. Japanese cards have Japanese names only: English search goes through
+  `src/lib/tcgdex/pokedex-en.ts` (Pokédex name table) and `species.ts`. They have no TCGPlayer data, so
+  `effectiveSource()` in `pricing.ts` always prices them from Cardmarket. Many have no image yet.
 - Images: TCGdex asset base URL + `/{quality}.webp` where quality is `low` or `high`.
   Use plain `<img loading="lazy">` (not next/image) to stay inside Vercel Hobby image-optimisation quota.
 

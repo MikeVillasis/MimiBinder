@@ -70,7 +70,7 @@ export function CardView({ id }: { id: string }) {
 
   if (loading) {
     return (
-      <div className="grid gap-6 md:grid-cols-[320px_1fr]" aria-busy="true">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-[320px_minmax(0,1fr)]" aria-busy="true">
         <Skeleton className="aspect-[63/88] w-full max-w-xs rounded-2xl" />
         <div className="flex flex-col gap-3">
           <Skeleton className="h-8 w-2/3" />
@@ -90,7 +90,7 @@ export function CardView({ id }: { id: string }) {
       <Link href="/search" onClick={goBack} className="mb-3 inline-flex min-h-11 min-w-11 items-center text-sm text-muted hover:text-fg">
         ← Back
       </Link>
-      <div className="grid gap-6 md:grid-cols-[320px_1fr] md:items-start">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-[320px_minmax(0,1fr)] md:items-start">
         <div className="mx-auto w-full max-w-[300px] md:sticky md:top-8 md:max-w-none">
           <button type="button" onClick={() => setZoom(true)} aria-label={`Zoom ${card.name}`} className="block w-full cursor-zoom-in">
             <CardImage image={card.image} name={card.name} quality="high" className="card-shadow" />

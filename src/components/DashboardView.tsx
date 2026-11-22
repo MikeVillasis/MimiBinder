@@ -122,7 +122,7 @@ export function DashboardView() {
         {stats.top.length === 0 ? (
           <p className="text-sm text-muted">{loading ? "Loading prices…" : "No priced cards yet."}</p>
         ) : (
-          <ol className="grid gap-2 md:grid-cols-2">
+          <ol className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {stats.top.map(({ e, v }, i) => (
               <li key={e.id}>
                 <Link href={cardHref(e.cardId)} className="flex min-h-11 items-center gap-3 rounded-2xl border border-line bg-surface p-2.5 hover:border-accent/50">
@@ -174,7 +174,7 @@ export function DashboardView() {
               All binders →
             </Link>
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {completion.map(({ set, c }) => (
               <Link key={set.id} href={`/binders/set/${encodeURIComponent(set.id)}`} className="rounded-2xl border border-line bg-surface p-3 hover:border-accent/50">
                 <div className="flex items-center gap-3">

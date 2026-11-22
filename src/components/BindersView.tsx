@@ -117,7 +117,7 @@ function SetsTab({ lang }: { lang: Lang }) {
       {filtered.length === 0 ? (
         <EmptyState title="No sets" body="No sets match your filter." />
       ) : (
-        <div className="grid gap-2 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
           {filtered.map((s) => (
             <SetRow key={s.id} set={s} owned={grouped.has(s.id)} c={grouped.has(s.id) ? setCompletion(grouped.get(s.id)!, s) : undefined} />
           ))}
@@ -134,7 +134,7 @@ function GenerationsTab({ lang }: { lang: Lang }) {
   if (loading) return <ListSkeleton />;
   if (error || !series) return <ErrorState message={error ?? "Could not load generations."} onRetry={retry} />;
   return (
-    <div className="grid gap-2 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
       {series.map((s) => {
         const list = grouped.get(s.id) ?? [];
         const unique = new Set(list.map((e) => e.cardId)).size;
@@ -189,7 +189,7 @@ function CustomTab() {
       ) : binders.length === 0 ? (
         <EmptyState title="No custom binders yet" body="Group cards any way you like: trade binder, favourites, a deck wishlist." />
       ) : (
-        <div className="grid gap-2 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
           {binders.map((b) => {
             const n = (entries ?? []).filter((e) => e.binderIds.includes(b.id)).length;
             return (
@@ -212,7 +212,7 @@ function CustomTab() {
 
 function ListSkeleton() {
   return (
-    <div className="grid gap-2 md:grid-cols-2" aria-busy="true">
+    <div className="grid grid-cols-1 gap-2 md:grid-cols-2" aria-busy="true">
       {Array.from({ length: 8 }).map((_, i) => (
         <Skeleton key={i} className="h-16 w-full rounded-2xl" />
       ))}
