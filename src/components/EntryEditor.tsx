@@ -2,12 +2,23 @@
 
 import { useState } from "react";
 import { removeEntry, updateEntry, useBinders } from "@/lib/db";
+import { getCard } from "@/lib/api-client";
+import { printingKey, printingLabel } from "@/lib/stamps";
 import { CONDITION_LABELS, VARIANT_LABELS, type CollectionEntry, type Condition, type Currency, type Variant } from "@/lib/types";
+import { useAsync } from "./hooks";
+import { printingChoices } from "./printings";
 import { Button, ConfirmDialog, Field, Sheet, cx, inputCls } from "./ui";
 
 export function EntryEditor({ entry, onClose }: { entry: CollectionEntry; onClose: () => void }) {
   const binders = useBinders();
-  const [variant, setVariant] = useState<Variant>(entry.variant);
+  const [printing, setPrinting] = useState(printingKey(entry.variant, entry.stamp));
+  const { data: card } = useAsync(() => getCard(entry.cardId), entry.cardId);
+  // Every regular variant (as before) plus the card's stamped printings once its detail has loaded.
+  const choices = printingChoices(card, Object.keys(VARIANT_LABELS) as Variant[]);
+  if (!choices.some((c) => c.key === printing)) {
+    choices.push({ key: printing, variant: entry.variant, stamp: entry.stamp, label: printingLabel(entry.variant, entry.stamp) });
+  }
+  const chosen = choices.find((c) => c.key === printing)!;
   const [condition, setCondition] = useState<Condition>(entry.condition);
   const [qty, setQty] = useState(entry.quantity);
   const [price, setPrice] = useState(entry.purchasePrice != null ? String(entry.purchasePrice) : "");
@@ -23,7 +34,8 @@ export function EntryEditor({ entry, onClose }: { entry: CollectionEntry; onClos
     if (parsed != null && (Number.isNaN(parsed) || parsed < 0)) return setError("Enter a valid purchase price.");
     try {
       await updateEntry(entry.id, {
-        variant,
+        variant: chosen.variant,
+        stamp: chosen.stamp ?? "",
         condition,
         quantity: qty,
         purchasePrice: parsed,
@@ -41,12 +53,12 @@ export function EntryEditor({ entry, onClose }: { entry: CollectionEntry; onClos
     <>
       <Sheet open onClose={onClose} title={`Edit ${entry.cardName}`}>
         <form onSubmit={save} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Variant">
-              <select className={inputCls} value={variant} onChange={(e) => setVariant(e.target.value as Variant)}>
-                {(Object.keys(VARIANT_LABELS) as Variant[]).map((v) => (
-                  <option key={v} value={v}>
-                    {VARIANT_LABELS[v]}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Printing">
+              <select className={inputCls} value={chosen.key} onChange={(e) => setPrinting(e.target.value)}>
+                {choices.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
                   </option>
                 ))}
               </select>
@@ -133,7 +145,7 @@ export function EntryEditor({ entry, onClose }: { entry: CollectionEntry; onClos
         open={confirmDel}
         danger
         title="Remove from collection?"
-        body={`${entry.cardName} (${VARIANT_LABELS[entry.variant]} ×${entry.quantity}) will be removed from your collection.`}
+        body={`${entry.cardName} (${printingLabel(entry.variant, entry.stamp)} ×${entry.quantity}) will be removed from your collection.`}
         confirmLabel="Remove"
         onClose={() => setConfirmDel(false)}
         onConfirm={async () => {

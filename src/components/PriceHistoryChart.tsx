@@ -5,19 +5,22 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { getPriceHistory } from "@/lib/api-client";
 import { useEntries } from "@/lib/db";
 import { useAuth } from "@/lib/sync";
-import { VARIANT_LABELS, type CardDetail, type PriceSnapshot, type Variant } from "@/lib/types";
+import { printingKey, printingLabel } from "@/lib/stamps";
+import type { CardDetail, PriceSnapshot, Variant } from "@/lib/types";
 import { effectiveSource } from "@/lib/pricing";
 import { useAsync, useMoney } from "./hooks";
 import { Segmented, Skeleton } from "./ui";
 
-function TrendFallback({ card, variant }: { card: CardDetail; variant: Variant }) {
+function TrendFallback({ card, variant, stamp }: { card: CardDetail; variant: Variant; stamp?: string }) {
   const { fmt } = useMoney();
   const cm = card.prices.cardmarket;
-  if (!cm) return null;
+  const stampedCm = stamp ? card.stamped?.find((s) => s.variant === variant && s.stamp === stamp)?.cardmarket : undefined;
+  if (stamp && !stampedCm) return null;
+  if (!cm && !stampedCm) return null;
   // Same block selection as unitPrice() for cardmarket.
   const wantsHolo = variant === "reverse" || (variant === "holo" && card.variants.includes("normal"));
-  const holoOk = !!cm.holo && (cm.holo.trend != null || cm.holo.avg != null);
-  const b = wantsHolo && holoOk ? cm.holo! : cm.normal;
+  const holoOk = !!cm?.holo && (cm.holo.trend != null || cm.holo.avg != null);
+  const b = stampedCm ?? (wantsHolo && holoOk ? cm!.holo! : cm!.normal);
   if (!b) return null;
   const steps = [
     { label: "30d avg", v: b.avg30 },
@@ -59,25 +62,36 @@ export function PriceHistoryChart({ card }: { card: CardDetail }) {
   const { data, loading, error } = useAsync<PriceSnapshot[]>(() => getPriceHistory(cardId), cardId);
   const { settings, to, fmt } = useMoney();
   const source = effectiveSource(cardId, settings.priceSource);
-  const [picked, setPicked] = useState<Variant>();
+  const [picked, setPicked] = useState<string>();
 
+  // Every printing of the card (regular, then stamped); the selector offers the ones with history, or all
+  // when a stamped printing exists so an empty stamped printing can explain itself.
+  const printings = useMemo(
+    () => [
+      ...variants.map((v) => ({ key: printingKey(v), variant: v, stamp: "", label: printingLabel(v) })),
+      ...(card.stamped ?? []).map((s) => ({ key: printingKey(s.variant, s.stamp), variant: s.variant, stamp: s.stamp, label: printingLabel(s.variant, s.stamp) })),
+    ],
+    [variants, card.stamped],
+  );
   const present = useMemo(() => {
-    const set = new Set((data ?? []).map((s) => s.variant));
-    return variants.filter((v) => set.has(v));
-  }, [data, variants]);
-  const variant = picked && present.includes(picked) ? picked : present[0];
+    const have = new Set((data ?? []).map((s) => printingKey(s.variant, s.stamp || undefined)));
+    return printings.filter((p) => have.has(p.key) || (p.stamp !== "" && have.size > 0));
+  }, [data, printings]);
+  const current = present.find((p) => p.key === picked) ?? present[0];
+  const variant = current?.variant;
+  const stamp = current?.stamp ?? "";
 
   const points = useMemo(() => {
     if (!data || !variant) return [];
     return data
-      .filter((s) => s.variant === variant)
+      .filter((s) => s.variant === variant && (s.stamp ?? "") === stamp)
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((s) => {
         const raw = source === "tcgplayer" ? s.tcgplayerMarketUsd : s.cardmarketTrendEur;
         const cur = source === "tcgplayer" ? "USD" : "EUR";
         return { date: s.date, value: raw == null ? null : to(raw, cur) };
       });
-  }, [data, variant, source, to]);
+  }, [data, variant, stamp, source, to]);
 
   return (
     <section className="rounded-2xl border border-line bg-surface p-4" aria-labelledby="hist-h">
@@ -88,9 +102,9 @@ export function PriceHistoryChart({ card }: { card: CardDetail }) {
         {present.length > 1 && (
           <Segmented
             label="History variant"
-            value={variant!}
+            value={current!.key}
             onChange={setPicked}
-            options={present.map((v) => ({ value: v, label: VARIANT_LABELS[v] }))}
+            options={present.map((p) => ({ value: p.key, label: p.label }))}
           />
         )}
       </div>
@@ -101,11 +115,13 @@ export function PriceHistoryChart({ card }: { card: CardDetail }) {
           <div className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm text-muted">
             {error
               ? "Price history is unavailable right now."
+              : stamp
+                ? `No price history for the ${printingLabel(variant!, stamp)} printing yet. It starts once this printing has been in a daily snapshot.`
               : user && ownsCard
                 ? "History starts with the next daily snapshot (around 10:00 UTC)."
                 : "Daily price history is recorded for cards in the site owner's synced collection."}
           </div>
-          <TrendFallback card={card} variant={variant ?? variants[0] ?? "normal"} />
+          <TrendFallback card={card} variant={variant ?? variants[0] ?? "normal"} stamp={stamp} />
         </>
       ) : (
         <div className="h-52 w-full md:h-64">
@@ -133,7 +149,7 @@ export function PriceHistoryChart({ card }: { card: CardDetail }) {
         <p className="mt-2 text-xs text-muted">More points appear daily.</p>
       )}
       {!loading && !error && points.length >= 1 && points.length < 3 && (
-        <TrendFallback card={card} variant={variant ?? variants[0] ?? "normal"} />
+        <TrendFallback card={card} variant={variant ?? variants[0] ?? "normal"} stamp={stamp} />
       )}
       <p className="mt-2 text-xs text-muted">
         {source === "tcgplayer" ? "TCGPlayer market (USD)" : "Cardmarket trend (EUR)"} converted at today&apos;s rate.

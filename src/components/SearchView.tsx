@@ -90,8 +90,8 @@ export function SearchView() {
             inputMode="search"
             enterKeyHint="search"
             autoComplete="off"
-            aria-label="Search cards by name"
-            placeholder={lang === "ja" ? "Search by name, e.g. Pikachu or ピカチュウ" : "Search cards by name, e.g. Charizard"}
+            aria-label="Search cards by name or number"
+            placeholder={lang === "ja" ? "Search by name, e.g. Pikachu or ピカチュウ" : "Name or number, e.g. Zorua 189 or 189/159"}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             className={inputCls}
@@ -109,7 +109,7 @@ export function SearchView() {
         <EmptyState title="Find a card" body={
             lang === "ja"
               ? "Search Japanese cards by English Pokemon name (for example “Pikachu”) or by Japanese name. Trainer and Energy cards need the Japanese name."
-              : "Type a Pokemon name to search every card, or browse by set to see full checklists."
+              : "Type a Pokemon name or a card number (like “Zorua 189”, “#189” or “189/159”) to search every card, or browse by set to see full checklists."
           }
         >
           <Link href={`/binders?tab=sets${lang === "ja" ? "&lang=ja" : ""}`} className="inline-flex min-h-11 items-center rounded-xl bg-accent px-4 font-bold text-accent-fg">
@@ -124,7 +124,7 @@ export function SearchView() {
 
       {q && !error && !loading && shown.length === 0 && <EmptyState
           title="No cards found"
-          body={lang === "ja" ? `Nothing matched “${q}”. Try the English Pokemon name, or the Japanese name for Trainer and Energy cards.` : `Nothing matched “${q}”. Try a shorter name.`}
+          body={lang === "ja" ? `Nothing matched “${q}”. Try the English Pokemon name, or the Japanese name for Trainer and Energy cards.` : `Nothing matched “${q}”. Try a shorter name, or check the card number.`}
         />}
 
       {shown.length > 0 && (

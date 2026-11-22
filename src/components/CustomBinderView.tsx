@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { removeBinder, updateBinder, updateEntry, useBinders, useEntries } from "@/lib/db";
-import { VARIANT_LABELS } from "@/lib/types";
+import { printingLabel } from "@/lib/stamps";
 import { CardImage } from "./CardImage";
 import { cardHref } from "./hooks";
 import { Button, CardGridSkeleton, ConfirmDialog, EmptyState, Sheet, inputCls } from "./ui";
@@ -73,7 +73,7 @@ export function CustomBinderView({ id }: { id: string }) {
               </Link>
               <div className="mt-1 truncate text-xs font-semibold">{e.cardName}</div>
               <div className="truncate text-xs text-muted">
-                {VARIANT_LABELS[e.variant]} · ×{e.quantity}
+                {printingLabel(e.variant, e.stamp)} · ×{e.quantity}
               </div>
               <button
                 type="button"
@@ -117,7 +117,7 @@ export function CustomBinderView({ id }: { id: string }) {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{e.cardName}</div>
                   <div className="truncate text-xs text-muted">
-                    {e.setName} · {VARIANT_LABELS[e.variant]}
+                    {e.setName} · {printingLabel(e.variant, e.stamp)}
                   </div>
                 </div>
                 <Button size="sm" onClick={() => updateEntry(e.id, { binderIds: [...e.binderIds, id] })} aria-label={`Add ${e.cardName}`}>

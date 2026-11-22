@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { addEntry, useBinders } from "@/lib/db";
-import { CONDITION_LABELS, VARIANT_LABELS, type CardDetail, type Condition, type Currency, type Variant } from "@/lib/types";
+import { CONDITION_LABELS, type CardDetail, type Condition, type Currency, type Variant } from "@/lib/types";
+import { printingKey } from "@/lib/stamps";
+import { printingChoices } from "./printings";
 import { useMoney } from "./hooks";
 import { Button, Field, Sheet, cx, inputCls } from "./ui";
 
@@ -23,8 +25,12 @@ export function AddToCollectionSheet({
 }) {
   const { currency } = useMoney();
   const binders = useBinders();
-  const variants: Variant[] = card.variants.length ? card.variants : ["normal"];
-  const [variant, setVariant] = useState<Variant>(defaultVariant && variants.includes(defaultVariant) ? defaultVariant : variants[0]);
+  const choices = printingChoices(card);
+  const [printing, setPrinting] = useState<string>(() => {
+    const k = defaultVariant ? printingKey(defaultVariant) : "";
+    return choices.some((c) => c.key === k) ? k : choices[0].key;
+  });
+  const chosen = choices.find((c) => c.key === printing) ?? choices[0];
   const [condition, setCondition] = useState<Condition>("NM");
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState("");
@@ -51,7 +57,8 @@ export function AddToCollectionSheet({
         serieId: card.serieId,
         serieName: card.serieName,
         rarity: card.rarity,
-        variant,
+        variant: chosen.variant,
+        ...(chosen.stamp ? { stamp: chosen.stamp } : {}),
         condition,
         quantity: qty,
         purchasePrice: parsed,
@@ -71,11 +78,11 @@ export function AddToCollectionSheet({
   return (
     <Sheet open={open} onClose={onClose} title={`Add ${card.name}`}>
       <form onSubmit={submit} className="flex flex-col gap-4">
-        <Field label="Variant">
-          <select className={inputCls} value={variant} onChange={(e) => setVariant(e.target.value as Variant)}>
-            {variants.map((v) => (
-              <option key={v} value={v}>
-                {VARIANT_LABELS[v]}
+        <Field label="Printing">
+          <select className={inputCls} value={chosen.key} onChange={(e) => setPrinting(e.target.value)}>
+            {choices.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
               </option>
             ))}
           </select>

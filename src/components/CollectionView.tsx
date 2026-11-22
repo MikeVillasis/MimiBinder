@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { updateEntry, useBinders, useEntries } from "@/lib/db";
 import { langOf } from "@/lib/lang";
+import { printingKey, printingLabel } from "@/lib/stamps";
+import { matchesCardNumber, parseCardQuery } from "@/lib/search-query";
 import { useCollectionPrices } from "@/lib/useCollectionPrices";
 import { CONDITION_LABELS, VARIANT_LABELS, type CollectionEntry, type Condition, type Variant } from "@/lib/types";
 import { CardImage } from "./CardImage";
@@ -27,6 +29,7 @@ export function CollectionView() {
   const [setF, setSetF] = useState("");
   const [genF, setGenF] = useState("");
   const [varF, setVarF] = useState("");
+  const [text, setText] = useState("");
   const [condF, setCondF] = useState("");
   const [binderF, setBinderF] = useState("");
   const [langF, setLangF] = useState("");
@@ -47,11 +50,15 @@ export function CollectionView() {
   const genOptions = useMemo(() => uniq((entries ?? []).filter((e) => e.serieId).map((e) => [e.serieId!, e.serieName ?? e.serieId!] as const)), [entries]);
 
   const filtered = useMemo(() => {
+    const parsed = parseCardQuery(text);
+    const nameNeedle = parsed.name.toLowerCase();
     const f = rows.filter(
       ({ e }) =>
+        (!nameNeedle || e.cardName.toLowerCase().includes(nameNeedle) || e.setName.toLowerCase().includes(nameNeedle)) &&
+        (!parsed.number || matchesCardNumber(e.localId, parsed.number)) &&
         (!setF || e.setId === setF) &&
         (!genF || e.serieId === genF) &&
-        (!varF || e.variant === varF) &&
+        (!varF || printingKey(e.variant, e.stamp) === varF) &&
         (!condF || e.condition === condF) &&
         (!binderF || e.binderIds.includes(binderF)) &&
         (!langF || langOf(e.cardId) === langF),
@@ -64,7 +71,7 @@ export function CollectionView() {
       recent: (a, b) => b.e.createdAt.localeCompare(a.e.createdAt),
     };
     return [...f].sort(cmp[sort]);
-  }, [rows, setF, genF, varF, condF, binderF, langF, sort]);
+  }, [rows, text, setF, genF, varF, condF, binderF, langF, sort]);
 
   if (entries === undefined) {
     return (
@@ -98,6 +105,7 @@ export function CollectionView() {
   const compactFmt = (n: number) =>
     new Intl.NumberFormat("en-CA", { style: "currency", currency: settings.currency, notation: "compact", maximumFractionDigits: 1 }).format(n);
   const clearAll = () => {
+    setText("");
     setSetF("");
     setGenF("");
     setVarF("");
@@ -105,6 +113,10 @@ export function CollectionView() {
     setBinderF("");
     setLangF("");
   };
+  const printingOptions = [
+    ...(Object.keys(VARIANT_LABELS) as Variant[]).map((v) => [v, VARIANT_LABELS[v]] as const),
+    ...uniq(entries.filter((e) => e.stamp).map((e) => [printingKey(e.variant, e.stamp), printingLabel(e.variant, e.stamp)] as const)),
+  ];
   const labelOf = (opts: (readonly [string, string])[], v: string) => opts.find(([k]) => k === v)?.[1] ?? v;
   const hasJa = (entries ?? []).some((e) => langOf(e.cardId) === "ja");
   const filterSels = [
@@ -113,7 +125,7 @@ export function CollectionView() {
       : []),
     { key: "set", label: "Set", value: setF, set: setSetF, options: setOptions as (readonly [string, string])[] },
     { key: "gen", label: "Generation", value: genF, set: setGenF, options: genOptions as (readonly [string, string])[] },
-    { key: "var", label: "Variant", value: varF, set: setVarF, options: (Object.keys(VARIANT_LABELS) as Variant[]).map((v) => [v, VARIANT_LABELS[v]] as const) },
+    { key: "var", label: "Variant", value: varF, set: setVarF, options: printingOptions },
     { key: "cond", label: "Condition", value: condF, set: setCondF, options: (Object.keys(CONDITION_LABELS) as Condition[]).map((c) => [c, c] as const) },
     { key: "binder", label: "Binder", value: binderF, set: setBinderF, options: (binders ?? []).map((b) => [b.id, b.name] as const) },
   ];
@@ -141,6 +153,16 @@ export function CollectionView() {
           sub={gainPct != null ? `${gainPct >= 0 ? "+" : ""}${gainPct.toFixed(1)}% vs cost` : "no cost recorded"}
         />
       </div>
+
+      <input
+        type="search"
+        aria-label="Search your collection by name or number"
+        placeholder="Name or number, e.g. Zorua 189"
+        autoComplete="off"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        className={cx(inputCls, "mb-3")}
+      />
 
       <div className="mb-3 flex items-end gap-2 md:hidden">
         <div className="min-w-0 flex-1">{sortSel}</div>
@@ -219,8 +241,8 @@ export function CollectionView() {
                     <div className="whitespace-nowrap text-xs font-bold text-accent" title={value != null ? fmtDisplay(value) : undefined} aria-label={value != null ? fmtDisplay(value) : "No price"}>
                       {value != null ? (value >= 1000 ? compactFmt(value) : fmtDisplay(value)) : "—"}
                     </div>
-                    <div className="truncate text-xs text-muted">
-                      {VARIANT_LABELS[e.variant]} · {e.condition}
+                    <div className="line-clamp-2 break-words text-xs text-muted">
+                      {printingLabel(e.variant, e.stamp)} · {e.condition}
                     </div>
                   </div>
                   <button
@@ -249,7 +271,7 @@ export function CollectionView() {
                   {e.setName} · #{e.localId}
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1">
-                  <Badge>{VARIANT_LABELS[e.variant]}</Badge>
+                  <Badge>{printingLabel(e.variant, e.stamp)}</Badge>
                   <Badge>{e.condition}</Badge>
                   {langOf(e.cardId) === "ja" && <LangBadge className="shadow-none" />}
                 </div>
