@@ -3,11 +3,58 @@
 import { useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getPriceHistory } from "@/lib/api-client";
-import { VARIANT_LABELS, type PriceSnapshot, type Variant } from "@/lib/types";
+import { useEntries } from "@/lib/db";
+import { useAuth } from "@/lib/sync";
+import { VARIANT_LABELS, type CardDetail, type PriceSnapshot, type Variant } from "@/lib/types";
 import { useAsync, useMoney } from "./hooks";
 import { Segmented, Skeleton } from "./ui";
 
-export function PriceHistoryChart({ cardId, variants }: { cardId: string; variants: Variant[] }) {
+function TrendFallback({ card, variant }: { card: CardDetail; variant: Variant }) {
+  const { fmt } = useMoney();
+  const cm = card.prices.cardmarket;
+  if (!cm) return null;
+  // Same block selection as unitPrice() for cardmarket.
+  const wantsHolo = variant === "reverse" || (variant === "holo" && card.variants.includes("normal"));
+  const holoOk = !!cm.holo && (cm.holo.trend != null || cm.holo.avg != null);
+  const b = wantsHolo && holoOk ? cm.holo! : cm.normal;
+  if (!b) return null;
+  const steps = [
+    { label: "30d avg", v: b.avg30 },
+    { label: "7d avg", v: b.avg7 },
+    { label: "Trend", v: b.trend },
+  ].filter((s): s is { label: string; v: number } => s.v != null);
+  if (steps.length === 0) return null;
+  const pct = b.avg30 != null && b.avg30 > 0 && b.trend != null ? ((b.trend - b.avg30) / b.avg30) * 100 : null;
+  return (
+    <div className="mt-3 rounded-xl bg-surface-2 px-3 py-2.5">
+      <p className="mb-1 text-xs font-semibold text-muted">Cardmarket trend</p>
+      <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm tabular-nums">
+        {steps.map((s, i) => (
+          <span key={s.label} className="inline-flex items-baseline gap-2">
+            {i > 0 && <span aria-hidden="true" className="text-muted">→</span>}
+            <span>
+              <span className="text-xs text-muted">{s.label} </span>
+              <span className="font-semibold">{fmt(s.v, "EUR")}</span>
+            </span>
+          </span>
+        ))}
+        {pct != null && (
+          <span className={`text-xs font-semibold ${pct >= 0 ? "text-good" : "text-danger"}`}>
+            {pct >= 0 ? "+" : ""}
+            {pct.toFixed(1)}%
+          </span>
+        )}
+      </p>
+    </div>
+  );
+}
+
+export function PriceHistoryChart({ card }: { card: CardDetail }) {
+  const cardId = card.id;
+  const variants = card.variants;
+  const { user } = useAuth();
+  const entries = useEntries();
+  const ownsCard = (entries ?? []).some((e) => e.cardId === cardId);
   const { data, loading, error } = useAsync<PriceSnapshot[]>(() => getPriceHistory(cardId), cardId);
   const { settings, to, fmt } = useMoney();
   const [picked, setPicked] = useState<Variant>();
@@ -47,14 +94,17 @@ export function PriceHistoryChart({ cardId, variants }: { cardId: string; varian
       </div>
       {loading ? (
         <Skeleton className="h-52 w-full" />
-      ) : error || points.length < 2 ? (
-        <div className="rounded-xl border border-dashed border-line px-4 py-10 text-center text-sm text-muted">
-          {error
-            ? "Price history is unavailable right now."
-            : points.length === 1
-              ? "Only one snapshot so far. The chart appears after the next daily snapshot."
-              : "History starts collecting after your first daily snapshot. Cards in your collection are snapshotted once a day."}
-        </div>
+      ) : error || points.length < 1 ? (
+        <>
+          <div className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm text-muted">
+            {error
+              ? "Price history is unavailable right now."
+              : user && ownsCard
+                ? "History starts with the next daily snapshot (around 10:00 UTC)."
+                : "Daily price history is recorded for cards in the site owner's synced collection."}
+          </div>
+          <TrendFallback card={card} variant={variant ?? variants[0] ?? "normal"} />
+        </>
       ) : (
         <div className="h-52 w-full md:h-64">
           <ResponsiveContainer width="100%" height="100%">
@@ -72,10 +122,16 @@ export function PriceHistoryChart({ cardId, variants }: { cardId: string; varian
                 contentStyle={{ background: "#131724", border: "1px solid #262d44", borderRadius: 12, color: "#eef0f7" }}
                 formatter={(v) => [fmt(Number(v), settings.currency), "Price"]}
               />
-              <Line type="monotone" dataKey="value" stroke="#ffcb05" strokeWidth={2.5} dot={points.length < 30} connectNulls />
+              <Line type="monotone" dataKey="value" stroke="#ffcb05" strokeWidth={2.5} dot={points.length < 30 ? { r: points.length < 3 ? 4 : 3 } : false} connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </div>
+      )}
+      {!loading && !error && points.length >= 1 && points.length < 3 && (
+        <p className="mt-2 text-xs text-muted">More points appear daily.</p>
+      )}
+      {!loading && !error && points.length >= 1 && points.length < 3 && (
+        <TrendFallback card={card} variant={variant ?? variants[0] ?? "normal"} />
       )}
       <p className="mt-2 text-xs text-muted">
         {settings.priceSource === "tcgplayer" ? "TCGPlayer market (USD)" : "Cardmarket trend (EUR)"} converted at today&apos;s rate.

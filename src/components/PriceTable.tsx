@@ -14,7 +14,10 @@ export function PriceTable({ card }: { card: CardDetail }) {
   const cm = card.prices.cardmarket;
   const tpRows = tp ? (Object.entries(tp.variants) as [Variant, TcgplayerPrice][]) : [];
   const cmRows: { label: string; p: CardmarketPrice }[] = cm
-    ? [{ label: "Normal", p: cm.normal }, ...(cm.holo ? [{ label: "Holo / Reverse", p: cm.holo }] : [])]
+    ? [
+        { label: card.variants.length === 1 ? VARIANT_LABELS[card.variants[0]] : "Non-holo", p: cm.normal },
+        ...(cm.holo ? [{ label: "Holo / Reverse", p: cm.holo }] : []),
+      ]
     : [];
   const active = settings.priceSource;
 

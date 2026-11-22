@@ -9,7 +9,7 @@ import { CardImage } from "./CardImage";
 import { CardTile, QtyBadge } from "./CardTile";
 import { EntryEditor } from "./EntryEditor";
 import { cardHref, entryCost, entryValue, localIdNum, useMoney } from "./hooks";
-import { Badge, Button, CardGridSkeleton, EmptyState, PageHeader, Segmented, Stat, cx, inputCls } from "./ui";
+import { Badge, Button, CardGridSkeleton, EmptyState, PageHeader, Segmented, Sheet, Stat, cx, inputCls } from "./ui";
 
 type Sort = "value" | "name" | "set" | "recent" | "gain";
 type View = "grid" | "list";
@@ -29,6 +29,7 @@ export function CollectionView() {
   const [condF, setCondF] = useState("");
   const [binderF, setBinderF] = useState("");
   const [editing, setEditing] = useState<string>();
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const rows = useMemo(
     () =>
@@ -86,8 +87,32 @@ export function CollectionView() {
   const total = filtered.reduce((s, r) => s + (r.value ?? 0), 0);
   const copies = filtered.reduce((s, r) => s + r.e.quantity, 0);
   const unpriced = filtered.filter((r) => r.value == null).length;
+  const costed = filtered.filter((r) => r.cost != null);
+  const cost = costed.reduce((s, r) => s + r.cost!, 0);
+  const gain = costed.reduce((s, r) => s + (r.value ?? 0), 0) - cost;
+  const gainPct = cost > 0 ? (gain / cost) * 100 : null;
   const editEntry = entries.find((e) => e.id === editing);
-  const anyFilter = setF || genF || varF || condF || binderF;
+  const compactFmt = (n: number) =>
+    new Intl.NumberFormat("en-CA", { style: "currency", currency: settings.currency, notation: "compact", maximumFractionDigits: 1 }).format(n);
+  const clearAll = () => {
+    setSetF("");
+    setGenF("");
+    setVarF("");
+    setCondF("");
+    setBinderF("");
+  };
+  const labelOf = (opts: (readonly [string, string])[], v: string) => opts.find(([k]) => k === v)?.[1] ?? v;
+  const filterSels = [
+    { key: "set", label: "Set", value: setF, set: setSetF, options: setOptions as (readonly [string, string])[] },
+    { key: "gen", label: "Generation", value: genF, set: setGenF, options: genOptions as (readonly [string, string])[] },
+    { key: "var", label: "Variant", value: varF, set: setVarF, options: (Object.keys(VARIANT_LABELS) as Variant[]).map((v) => [v, VARIANT_LABELS[v]] as const) },
+    { key: "cond", label: "Condition", value: condF, set: setCondF, options: (Object.keys(CONDITION_LABELS) as Condition[]).map((c) => [c, c] as const) },
+    { key: "binder", label: "Binder", value: binderF, set: setBinderF, options: (binders ?? []).map((b) => [b.id, b.name] as const) },
+  ];
+  const active = filterSels.filter((f) => f.value);
+  const sortSel = (
+    <Sel label="Sort" value={sort} onChange={(v) => setSort(v as Sort)} options={[["recent", "Recently added"], ["value", "Value"], ["gain", "Gain / loss"], ["name", "Name"], ["set", "Set"]]} bare />
+  );
 
   return (
     <div>
@@ -101,21 +126,72 @@ export function CollectionView() {
 
       <div className="mb-4 grid grid-cols-2 gap-3">
         <Stat label="Total value" value={fmtDisplay(total)} sub={unpriced ? `${unpriced} without price` : `in ${settings.currency}`} />
-        <Stat label="Entries shown" value={filtered.length} sub={anyFilter ? "filtered" : "all cards"} />
+        <Stat
+          label="Gain / loss"
+          tone={cost > 0 ? (gain >= 0 ? "good" : "bad") : undefined}
+          value={cost > 0 ? `${gain >= 0 ? "+" : ""}${fmtDisplay(gain)}` : "—"}
+          sub={gainPct != null ? `${gainPct >= 0 ? "+" : ""}${gainPct.toFixed(1)}% vs cost` : "no cost recorded"}
+        />
       </div>
 
-      <div className="mb-5 grid grid-cols-2 gap-2 md:grid-cols-6">
-        <Sel label="Sort" value={sort} onChange={(v) => setSort(v as Sort)} options={[["recent", "Recently added"], ["value", "Value"], ["gain", "Gain / loss"], ["name", "Name"], ["set", "Set"]]} bare />
-        <Sel label="Set" value={setF} onChange={setSetF} options={setOptions} />
-        <Sel label="Generation" value={genF} onChange={setGenF} options={genOptions} />
-        <Sel label="Variant" value={varF} onChange={setVarF} options={(Object.keys(VARIANT_LABELS) as Variant[]).map((v) => [v, VARIANT_LABELS[v]])} />
-        <Sel label="Condition" value={condF} onChange={setCondF} options={(Object.keys(CONDITION_LABELS) as Condition[]).map((c) => [c, c])} />
-        <Sel label="Binder" value={binderF} onChange={setBinderF} options={(binders ?? []).map((b) => [b.id, b.name])} />
+      <div className="mb-3 flex items-end gap-2 md:hidden">
+        <div className="min-w-0 flex-1">{sortSel}</div>
+        <Button variant="secondary" onClick={() => setFiltersOpen(true)} aria-haspopup="dialog" aria-label={`Filters, ${active.length} active`} className="shrink-0">
+          {active.length ? `Filters · ${active.length}` : "Filters"}
+        </Button>
       </div>
+
+      <div className="mb-3 hidden flex-wrap items-end gap-2 md:flex">
+        <div className="w-44">{sortSel}</div>
+        {filterSels.map((f) => (
+          <div key={f.key} className="w-40">
+            <Sel label={f.label} value={f.value} onChange={f.set} options={f.options} />
+          </div>
+        ))}
+      </div>
+
+      {active.length > 0 && (
+        <ul className="mb-4 flex flex-wrap gap-2" aria-label="Active filters">
+          {active.map((f) => (
+            <li key={f.key}>
+              <button
+                type="button"
+                onClick={() => f.set("")}
+                aria-label={`Remove ${f.label} filter: ${labelOf(f.options, f.value)}`}
+                className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-full border border-line bg-surface-2 pl-3 pr-3 text-xs font-semibold hover:bg-line"
+              >
+                <span className="truncate">{labelOf(f.options, f.value)}</span>
+                <span aria-hidden="true" className="text-base leading-none text-muted">×</span>
+              </button>
+            </li>
+          ))}
+          <li>
+            <button type="button" onClick={clearAll} className="inline-flex min-h-11 items-center px-2 text-xs font-semibold text-muted hover:text-fg">
+              Clear all
+            </button>
+          </li>
+        </ul>
+      )}
+
+      <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filters">
+        <div className="flex flex-col gap-3">
+          {filterSels.map((f) => (
+            <Sel key={f.key} label={f.label} value={f.value} onChange={f.set} options={f.options} />
+          ))}
+          <div className="mt-2 flex gap-2">
+            <Button variant="secondary" onClick={clearAll} disabled={active.length === 0} className="flex-1">
+              Clear all
+            </Button>
+            <Button onClick={() => setFiltersOpen(false)} className="flex-[2]">
+              Show {filtered.length} {filtered.length === 1 ? "card" : "cards"}
+            </Button>
+          </div>
+        </div>
+      </Sheet>
 
       {filtered.length === 0 ? (
         <EmptyState title="No matches" body="No cards match these filters.">
-          <Button variant="secondary" onClick={() => { setSetF(""); setGenF(""); setVarF(""); setCondF(""); setBinderF(""); }}>
+          <Button variant="secondary" onClick={clearAll}>
             Clear filters
           </Button>
         </EmptyState>
@@ -132,7 +208,9 @@ export function CollectionView() {
               footer={
                 <div className="mt-0.5 flex items-center justify-between gap-1">
                   <div className="min-w-0">
-                    <div className="truncate text-xs font-bold text-accent">{value != null ? fmtDisplay(value) : "—"}</div>
+                    <div className="whitespace-nowrap text-xs font-bold text-accent" title={value != null ? fmtDisplay(value) : undefined} aria-label={value != null ? fmtDisplay(value) : "No price"}>
+                      {value != null ? (value >= 1000 ? compactFmt(value) : fmtDisplay(value)) : "—"}
+                    </div>
                     <div className="truncate text-[11px] text-muted">
                       {VARIANT_LABELS[e.variant]} · {e.condition}
                     </div>

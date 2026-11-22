@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { useSync } from "@/lib/sync";
+import { useTrackNavigation } from "./navHistory";
 
 const NAV = [
   { href: "/", label: "Home", icon: "M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" },
@@ -88,6 +89,7 @@ function ActiveSideNav() {
   return <SideNav path={usePathname()} />;
 }
 function ActiveBottomNav() {
+  useTrackNavigation(); // mounted once (bottom nav is always rendered, hidden on desktop)
   return <BottomNav path={usePathname()} />;
 }
 

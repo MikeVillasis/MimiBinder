@@ -1,19 +1,66 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { hasInAppHistory } from "./navHistory";
+import { useCallback, useEffect, useState } from "react";
 import { getCard } from "@/lib/api-client";
-import { useEntries } from "@/lib/db";
+import { getCachedCards, putCachedCards, useEntries } from "@/lib/db";
+import type { CardDetail } from "@/lib/types";
 import { CONDITION_LABELS, VARIANT_LABELS } from "@/lib/types";
 import { AddToCollectionSheet } from "./AddToCollectionSheet";
 import { CardImage } from "./CardImage";
-import { useAsync } from "./hooks";
 import { PriceHistoryChart } from "./PriceHistoryChart";
 import { PriceTable } from "./PriceTable";
 import { Badge, Button, ErrorState, Sheet, Skeleton } from "./ui";
 
 export function CardView({ id }: { id: string }) {
-  const { data: card, error, loading, retry } = useAsync(() => getCard(id), id);
+  const router = useRouter();
+  const [state, setState] = useState<{ id: string; card?: CardDetail; error?: string; fresh: boolean }>({ id: "", fresh: false });
+  const [nonce, setNonce] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    getCachedCards([id]).then(
+      ([cached]) => {
+        if (cancelled || !cached) return;
+        setState((s) => (s.id === id && s.fresh ? s : { id, card: cached, fresh: false }));
+      },
+      () => undefined,
+    );
+    getCard(id).then(
+      (card) => {
+        if (cancelled) return;
+        setState({ id, card, fresh: true });
+        void putCachedCards([card]).catch(() => undefined);
+      },
+      (e: unknown) => {
+        if (cancelled) return;
+        const error = e instanceof Error ? e.message : "Request failed";
+        // Keep a cached copy on screen if the network fails.
+        setState((s) => (s.id === id && s.card ? s : { id, error, fresh: true }));
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [id, nonce]);
+
+  const current = state.id === id ? state : undefined;
+  const card = current?.card;
+  const error = current?.card ? undefined : current?.error;
+  const loading = !current || (!current.card && !current.error);
+  const retry = useCallback(() => {
+    setState({ id: "", fresh: false });
+    setNonce((n) => n + 1);
+  }, []);
+
+  const goBack = (e: React.MouseEvent) => {
+    if (hasInAppHistory()) {
+      e.preventDefault();
+      router.back();
+    }
+  };
   const entries = useEntries();
   const [adding, setAdding] = useState(false);
   const [zoom, setZoom] = useState(false);
@@ -38,8 +85,8 @@ export function CardView({ id }: { id: string }) {
 
   return (
     <div>
-      <Link href="/search" className="mb-3 inline-flex min-h-11 items-center text-sm text-muted hover:text-fg">
-        ← Back to search
+      <Link href="/search" onClick={goBack} className="mb-3 inline-flex min-h-11 min-w-11 items-center text-sm text-muted hover:text-fg">
+        ← Back
       </Link>
       <div className="grid gap-6 md:grid-cols-[320px_1fr] md:items-start">
         <div className="mx-auto w-full max-w-[300px] md:sticky md:top-8 md:max-w-none">
@@ -52,7 +99,7 @@ export function CardView({ id }: { id: string }) {
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl">{card.name}</h1>
             <p className="mt-1 text-sm text-muted">
-              <Link href={`/binders/set/${encodeURIComponent(card.setId)}`} className="text-fg underline decoration-line underline-offset-2 hover:decoration-accent">
+              <Link href={`/binders/set/${encodeURIComponent(card.setId)}`} className="-my-3 inline-flex min-h-11 items-center align-middle text-fg underline decoration-line underline-offset-2 hover:decoration-accent">
                 {card.setName}
               </Link>{" "}
               · #{card.localId}
@@ -101,7 +148,7 @@ export function CardView({ id }: { id: string }) {
           )}
 
           <PriceTable card={card} />
-          <PriceHistoryChart cardId={card.id} variants={card.variants} />
+          <PriceHistoryChart card={card} />
         </div>
       </div>
 
