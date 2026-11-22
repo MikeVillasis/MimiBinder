@@ -1,4 +1,4 @@
-# PokeVault — architecture contract
+# MimiBinder — architecture contract
 
 Personal Pokemon TCG collection + price tracker. Installable PWA, mobile-first, works on desktop.
 Stack: Next.js 16 (App Router, `src/`), React 19, TypeScript strict, Tailwind v4, Dexie (IndexedDB),

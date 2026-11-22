@@ -1,0 +1,90 @@
+// Pure collection helpers (client-safe, unit tested).
+import { convert, unitPrice } from "./pricing";
+import type { CardDetail, CollectionEntry, FxRate, Settings, SetSummary } from "./types";
+
+/** Key used by groupBySerie for entries with no serie (e.g. added while TCGdex lacked it). */
+export const UNKNOWN_SERIE = "unknown";
+
+const live = (e: CollectionEntry) => !e.deletedAt;
+
+function groupBy(
+  entries: CollectionEntry[],
+  key: (e: CollectionEntry) => string,
+): Map<string, CollectionEntry[]> {
+  const out = new Map<string, CollectionEntry[]>();
+  for (const e of entries) {
+    if (!live(e)) continue;
+    const k = key(e);
+    const list = out.get(k);
+    if (list) list.push(e);
+    else out.set(k, [e]);
+  }
+  return out;
+}
+
+/** setId → entries (tombstones excluded). */
+export function groupBySet(entries: CollectionEntry[]): Map<string, CollectionEntry[]> {
+  return groupBy(entries, (e) => e.setId);
+}
+
+/** serieId → entries (tombstones excluded); missing serie → UNKNOWN_SERIE. */
+export function groupBySerie(entries: CollectionEntry[]): Map<string, CollectionEntry[]> {
+  return groupBy(entries, (e) => e.serieId || UNKNOWN_SERIE);
+}
+
+/**
+ * Completion counts unique numbered cards (localId 1..officialCount) owned from this set,
+ * so secret rares and lettered promos (e.g. "TG01") don't push it past 100%.
+ * `percent` is floored, so it only reads 100 when the set is complete.
+ */
+export function setCompletion(
+  entries: CollectionEntry[],
+  set: SetSummary,
+): { owned: number; total: number; percent: number } {
+  const total = set.officialCount;
+  const owned = new Set<number>();
+  for (const e of entries) {
+    if (!live(e) || e.setId !== set.id || e.quantity <= 0) continue;
+    if (!/^\d+$/.test(e.localId)) continue;
+    const n = parseInt(e.localId, 10);
+    if (n >= 1 && n <= total) owned.add(n);
+  }
+  const percent = total > 0 ? Math.floor((owned.size / total) * 100) : 0;
+  return { owned: owned.size, total, percent };
+}
+
+/**
+ * Collection market value vs. purchase cost, in `settings.currency`.
+ * `priced` / `unpriced` count entries (rows), not copies. Cost includes every entry with
+ * a purchase price; entries without a purchase currency are assumed to be in
+ * `settings.currency`. gain = value - cost.
+ */
+export function collectionValue(
+  entries: CollectionEntry[],
+  cards: Map<string, CardDetail>,
+  settings: Settings,
+  fx: FxRate,
+): { value: number; cost: number; gain: number; priced: number; unpriced: number } {
+  let value = 0;
+  let cost = 0;
+  let priced = 0;
+  let unpriced = 0;
+  for (const e of entries) {
+    if (!live(e)) continue;
+    const qty = Math.max(0, e.quantity);
+    const card = cards.get(e.cardId);
+    const p = card ? unitPrice(card, e.variant, settings.priceSource) : null;
+    if (p) {
+      value += convert(p.amount, p.currency, settings.currency, fx) * qty;
+      priced++;
+    } else {
+      unpriced++;
+    }
+    if (e.purchasePrice != null && Number.isFinite(e.purchasePrice)) {
+      const from = e.purchaseCurrency ?? settings.currency;
+      cost += convert(e.purchasePrice, from, settings.currency, fx) * qty;
+    }
+  }
+  const round = (n: number) => Math.round(n * 100) / 100;
+  return { value: round(value), cost: round(cost), gain: round(value - cost), priced, unpriced };
+}
