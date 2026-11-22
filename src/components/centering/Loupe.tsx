@@ -17,7 +17,18 @@ export interface LoupeState {
 const SIZE = 120;
 
 /** Zoomed inset shown while dragging, so the point under a finger stays visible. */
-export function Loupe({ source, state, windowPx }: { source: CanvasImageSource | null; state: LoupeState | null; windowPx: number }) {
+export function Loupe({
+  source,
+  state,
+  windowPx,
+  rotation = 0,
+}: {
+  source: CanvasImageSource | null;
+  state: LoupeState | null;
+  windowPx: number;
+  /** Clockwise degrees the photo is turned on screen; the zoomed view turns with it. */
+  rotation?: number;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -46,9 +57,15 @@ export function Loupe({ source, state, windowPx }: { source: CanvasImageSource |
     const cy1 = Math.min(sh, sy0 + windowPx);
     if (cx1 > cx0 && cy1 > cy0) {
       const k = px / windowPx;
-      ctx.drawImage(source, cx0, cy0, cx1 - cx0, cy1 - cy0, (cx0 - sx0) * k, (cy0 - sy0) * k, (cx1 - cx0) * k, (cy1 - cy0) * k);
+      // Rotate about the inspected point, which sits at the loupe's centre.
+      ctx.save();
+      ctx.translate(px / 2, px / 2);
+      ctx.rotate((rotation * Math.PI) / 180);
+      ctx.scale(k, k);
+      ctx.drawImage(source, cx0, cy0, cx1 - cx0, cy1 - cy0, cx0 - state.x, cy0 - state.y, cx1 - cx0, cy1 - cy0);
+      ctx.restore();
     }
-  }, [source, state, windowPx]);
+  }, [source, state, windowPx, rotation]);
 
   if (!state) return null;
   const left = Math.max(0, Math.min(state.bw - SIZE, state.ax - SIZE / 2));

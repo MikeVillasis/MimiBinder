@@ -9,6 +9,7 @@ import { CardImage } from "../CardImage";
 import { Button, PageHeader, SectionHeader, Surface } from "../ui";
 import { CaptureButtons } from "./CaptureButtons";
 import { CornerEditor } from "./CornerEditor";
+import { alignQuad, toPhoto, turn, uprightRotation, viewSize, type Rotation } from "./orient";
 import { decodePhoto, type Decoded } from "./decode";
 import { CenteringEngine } from "./engine";
 import { Readout } from "./Readout";
@@ -26,12 +27,14 @@ interface FaceState {
   note: string | null;
   /** False until the user has moved a corner, when the card was not found: never measure a default rectangle. */
   placed: boolean;
+  /** How the photo is turned on screen in the corner step (clockwise). Corners stay in photo pixels. */
+  rot: Rotation;
   fit: BorderFit | null;
   origFit: BorderFit | null;
   error: string | null;
 }
 
-const EMPTY: FaceState = { status: "empty", busy: "", quad: null, detected: null, note: null, placed: true, fit: null, origFit: null, error: null };
+const EMPTY: FaceState = { status: "empty", busy: "", quad: null, detected: null, note: null, placed: true, rot: 0, fit: null, origFit: null, error: null };
 
 /** Heavy buffers live here (references only): the decoded photo and the warped card. */
 interface Buffers {
@@ -39,17 +42,20 @@ interface Buffers {
   warp: RGBAImage | null;
 }
 
-function defaultQuad(w: number, h: number): Quad {
-  const ch = Math.min(h * 0.72, (w * 0.8 * 88) / 63);
+/** A centred, upright card-shaped starting quad as seen on screen, returned in photo pixels. */
+function defaultQuad(w: number, h: number, rot: Rotation = 0): Quad {
+  const v = viewSize(w, h, rot);
+  const ch = Math.min(v.h * 0.72, (v.w * 0.8 * 88) / 63);
   const cw = (ch * 63) / 88;
-  const x0 = (w - cw) / 2;
-  const y0 = (h - ch) / 2;
-  return [
+  const x0 = (v.w - cw) / 2;
+  const y0 = (v.h - ch) / 2;
+  const corners = [
     { x: x0, y: y0 },
     { x: x0 + cw, y: y0 },
     { x: x0 + cw, y: y0 + ch },
     { x: x0, y: y0 + ch },
   ];
+  return corners.map((p) => toPhoto(p, w, h, rot)) as Quad;
 }
 
 const TIPS = [
@@ -150,9 +156,12 @@ export function CenteringTool() {
       const det = await getEngine().load(face, dec.getPixels);
       if (stale()) return;
       const good = !!det.quad && det.confidence >= MIN_CONFIDENCE;
+      // Turn the photo so the card appears upright (e.g. a card shot sideways in a landscape photo).
+      const rot: Rotation = det.quad ? uprightRotation(det.quad) : 0;
       patch(face, {
         status: "corners",
-        quad: good ? det.quad : defaultQuad(dec.width, dec.height),
+        rot,
+        quad: good ? alignQuad(det.quad!, dec.width, dec.height, rot) : defaultQuad(dec.width, dec.height, rot),
         detected: det.quad,
         placed: !!det.quad,
         note: !det.quad
@@ -272,6 +281,15 @@ export function CenteringTool() {
             onMeasure={() => measure(tab)}
             onToCorners={() => toCorners(tab)}
             onQuad={(q) => patch(tab, { quad: q, placed: true })}
+            onRotate={(by) => {
+              const st = faces[tab];
+              const d = bufs[tab].decoded;
+              if (!st.quad || !d) return;
+              const rot = turn(st.rot, by);
+              // Re-label the corners so the screen's top edge is the card's top; an unplaced default quad is
+              // re-centred upright instead.
+              patch(tab, { rot, quad: st.placed ? alignQuad(st.quad, d.width, d.height, rot) : defaultQuad(d.width, d.height, rot) });
+            }}
             onFit={(fit) => patch(tab, { fit })}
             onCheck={(side) => setFocusSide({ face: tab, side, n: Date.now() })}
             onOther={() => setTab(tab === "front" ? "back" : "front")}
@@ -310,6 +328,7 @@ function FacePanel({
   onMeasure,
   onToCorners,
   onQuad,
+  onRotate,
   onFit,
   onCheck,
   onOther,
@@ -323,6 +342,7 @@ function FacePanel({
   onMeasure: () => void;
   onToCorners: () => void;
   onQuad: (q: Quad) => void;
+  onRotate: (by: 90 | -90) => void;
   onFit: (f: BorderFit) => void;
   onCheck: (s: Side) => void;
   onOther: () => void;
@@ -360,7 +380,6 @@ function FacePanel({
 
   if (state.status === "corners" && state.quad && bufs.decoded) {
     const d = bufs.decoded;
-    const rotate = () => onQuad([state.quad![1], state.quad![2], state.quad![3], state.quad![0]]);
     return (
       <Surface padded className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold tracking-tight">Check the corners</h2>
@@ -369,9 +388,9 @@ function FacePanel({
             {state.note}
           </p>
         ) : (
-          <p className="text-sm text-muted">Drag each round handle onto the card&apos;s outer corner. The green edge should be the top of the card.</p>
+          <p className="text-sm text-muted">Drag each round handle onto the card&apos;s outer corner. If the card isn&apos;t upright, turn the photo until it is.</p>
         )}
-        <CornerEditor bitmap={d.bitmap} width={d.width} height={d.height} quad={state.quad} onChange={onQuad} />
+        <CornerEditor bitmap={d.bitmap} width={d.width} height={d.height} quad={state.quad} rotation={state.rot} onChange={onQuad} />
         {!state.placed && (
           <p id={`${face}-place-hint`} className="text-sm font-semibold">
             Move the corners onto the card to continue.
@@ -382,14 +401,20 @@ function FacePanel({
           <Button onClick={onMeasure} disabled={!state.placed} aria-describedby={state.placed ? undefined : `${face}-place-hint`}>
             Measure
           </Button>
-          <Button variant="secondary" onClick={rotate} aria-label="Rotate 90 degrees: change which edge is the top">
+          <Button variant="secondary" onClick={() => onRotate(-90)} aria-label="Turn the photo left (counter-clockwise)">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 12a8 8 0 1 0 2.5-5.8M4 4v5h5" />
+            </svg>
+            Turn left
+          </Button>
+          <Button variant="secondary" onClick={() => onRotate(90)} aria-label="Turn the photo right (clockwise)">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5" />
             </svg>
-            Rotate 90°
+            Turn right
           </Button>
           {state.detected && (
-            <Button variant="ghost" onClick={() => onQuad(state.detected!)}>
+            <Button variant="ghost" onClick={() => onQuad(alignQuad(state.detected!, d.width, d.height, state.rot))}>
               Reset corners
             </Button>
           )}

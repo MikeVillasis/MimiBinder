@@ -3,24 +3,32 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Point, Quad } from "@/lib/centering";
 import { Loupe, type LoupeState } from "./Loupe";
+import { toPhoto, toView, viewSize, type Rotation } from "./orient";
 
 const NAMES = ["Top-left", "Top-right", "Bottom-right", "Bottom-left"];
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-/** Photo with the card quad and four draggable corner handles. Coordinates are in photo pixels. */
+/**
+ * Photo with the card quad and four draggable corner handles. `quad` is in photo pixels; the photo can be
+ * shown turned by `rotation` (clockwise), and everything on screen works in that rotated view.
+ */
 export function CornerEditor({
   bitmap,
   width,
   height,
   quad,
+  rotation = 0,
   onChange,
 }: {
   bitmap: ImageBitmap;
   width: number;
   height: number;
   quad: Quad;
+  rotation?: Rotation;
   onChange: (q: Quad) => void;
 }) {
+  const view = viewSize(width, height, rotation);
+  const vq = quad.map((p) => toView(p, width, height, rotation));
   const parentRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -33,14 +41,22 @@ export function CornerEditor({
     const ctx = c?.getContext("2d");
     if (!c || !ctx) return;
     const k = Math.min(1, 1600 / Math.max(width, height));
-    c.width = Math.round(width * k);
-    c.height = Math.round(height * k);
-    ctx.drawImage(bitmap, 0, 0, c.width, c.height);
-  }, [bitmap, width, height]);
+    const v = viewSize(width, height, rotation);
+    c.width = Math.round(v.w * k);
+    c.height = Math.round(v.h * k);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (rotation === 90) ctx.setTransform(0, 1, -1, 0, c.width, 0);
+    else if (rotation === 180) ctx.setTransform(-1, 0, 0, -1, c.width, c.height);
+    else if (rotation === 270) ctx.setTransform(0, -1, 1, 0, 0, c.height);
+    ctx.drawImage(bitmap, 0, 0, Math.round(width * k), Math.round(height * k));
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }, [bitmap, width, height, rotation]);
 
+  /** Pointer position → photo pixels (through the rotated view). */
   const toImage = (e: { clientX: number; clientY: number }): Point => {
     const r = wrapRef.current!.getBoundingClientRect();
-    return { x: ((e.clientX - r.left) / r.width) * width, y: ((e.clientY - r.top) / r.height) * height };
+    const v = { x: ((e.clientX - r.left) / r.width) * view.w, y: ((e.clientY - r.top) / r.height) * view.h };
+    return toPhoto(v, width, height, rotation);
   };
 
   const setCorner = (i: number, p: Point) => {
@@ -82,21 +98,24 @@ export function CornerEditor({
     const d = v[e.key];
     if (!d) return;
     e.preventDefault();
-    setCorner(i, { x: quad[i].x + d[0], y: quad[i].y + d[1] });
+    // Arrow keys move in screen directions, whatever way the photo is turned.
+    const at = toView(quad[i], width, height, rotation);
+    setCorner(i, toPhoto({ x: at.x + d[0], y: at.y + d[1] }, width, height, rotation));
   };
 
-  const pct = (p: Point) => ({ left: `${(p.x / width) * 100}%`, top: `${(p.y / height) * 100}%` });
-  const mid = { x: (quad[0].x + quad[1].x) / 2, y: (quad[0].y + quad[1].y) / 2 };
+  /** Position of a view-space point as CSS percentages. */
+  const pct = (p: Point) => ({ left: `${(p.x / view.w) * 100}%`, top: `${(p.y / view.h) * 100}%` });
+  const mid = { x: (vq[0].x + vq[1].x) / 2, y: (vq[0].y + vq[1].y) / 2 };
 
   return (
     <div ref={parentRef} className="relative">
-      <div className="mx-auto" style={{ width: `min(100%, calc(68dvh * ${width / height}))` }}>
-        <div ref={wrapRef} className="relative select-none overflow-visible rounded-ui-md bg-surface-2" style={{ aspectRatio: `${width} / ${height}` }}>
+      <div className="mx-auto" style={{ width: `min(100%, calc(68dvh * ${view.w / view.h}))` }}>
+        <div ref={wrapRef} className="relative select-none overflow-visible rounded-ui-md bg-surface-2" style={{ aspectRatio: `${view.w} / ${view.h}` }}>
           <canvas ref={canvasRef} className="absolute inset-0 h-full w-full rounded-lg" role="img" aria-label="Your photo with the detected card outline" />
-          <svg viewBox={`0 0 ${width} ${height}`} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
-            <polygon points={quad.map((p) => `${p.x},${p.y}`).join(" ")} fill="rgb(255 255 255 / 0.08)" stroke="black" strokeOpacity="0.6" strokeWidth="5" vectorEffect="non-scaling-stroke" />
-            <polygon points={quad.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="var(--color-accent)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-            <line x1={quad[0].x} y1={quad[0].y} x2={quad[1].x} y2={quad[1].y} stroke="var(--color-good)" strokeWidth="5" vectorEffect="non-scaling-stroke" />
+          <svg viewBox={`0 0 ${view.w} ${view.h}`} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+            <polygon points={vq.map((p) => `${p.x},${p.y}`).join(" ")} fill="rgb(255 255 255 / 0.08)" stroke="black" strokeOpacity="0.6" strokeWidth="5" vectorEffect="non-scaling-stroke" />
+            <polygon points={vq.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke="var(--color-accent)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+            <line x1={vq[0].x} y1={vq[0].y} x2={vq[1].x} y2={vq[1].y} stroke="var(--color-good)" strokeWidth="5" vectorEffect="non-scaling-stroke" />
           </svg>
           <span className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded bg-good px-1.5 py-0.5 text-xs font-bold text-bg" style={pct(mid)}>
             Top edge
@@ -112,7 +131,7 @@ export function CornerEditor({
               onPointerUp={up}
               onPointerCancel={up}
               onKeyDown={key}
-              style={{ ...pct(p), touchAction: "none" }}
+              style={{ ...pct(vq[i]), touchAction: "none" }}
               className="group absolute z-10 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center rounded-full outline-none active:cursor-grabbing"
             >
               <span className="h-5 w-5 rounded-full border-2 border-white bg-accent shadow-[0_0_0_1.5px_rgb(0_0_0/0.7)] group-focus-visible:ring-4 group-focus-visible:ring-fg" />
@@ -120,7 +139,7 @@ export function CornerEditor({
           ))}
         </div>
       </div>
-      <Loupe source={bitmap} state={loupe} windowPx={Math.max(40, Math.round(Math.max(width, height) / 40))} />
+      <Loupe source={bitmap} state={loupe} rotation={rotation} windowPx={Math.max(40, Math.round(Math.max(width, height) / 40))} />
     </div>
   );
 }
