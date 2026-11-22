@@ -7,10 +7,29 @@ import { useEffect, useRef } from "react";
  * navigating the page underneath it. While `open`, a same-URL history entry is pushed; Back pops it and
  * calls `onClose`. Closing the overlay any other way (button, Esc, backdrop) removes that entry again.
  *
- * Overlays stack (a confirm dialog on top of a sheet): Back only closes the top-most one.
+ * Overlays stack (a confirm dialog on top of a sheet): Back only closes the top-most one. One shared
+ * popstate listener owns the stack, and pops we cause ourselves (history.back() after a UI close) are
+ * counted and ignored, so cancelling a dialog never closes the sheet beneath it.
  */
-const stack: number[] = [];
-let nextId = 1;
+interface Entry {
+  close: () => void;
+  pushed: boolean;
+}
+
+const stack: Entry[] = [];
+let selfPops = 0;
+let listening = false;
+
+function onPop() {
+  if (selfPops > 0) {
+    selfPops--;
+    return;
+  }
+  const top = stack.pop();
+  if (!top) return;
+  top.pushed = false; // the browser already removed its entry
+  top.close();
+}
 
 export function useBackToClose(open: boolean, onClose: () => void) {
   const onCloseRef = useRef(onClose);
@@ -20,27 +39,22 @@ export function useBackToClose(open: boolean, onClose: () => void) {
 
   useEffect(() => {
     if (!open || typeof window === "undefined") return;
-    const id = nextId++;
-    let pushed = true;
-    stack.push(id);
+    if (!listening) {
+      window.addEventListener("popstate", onPop);
+      listening = true;
+    }
+    const entry: Entry = { close: () => onCloseRef.current(), pushed: true };
+    stack.push(entry);
     // Next.js integrates native pushState into its router; same URL, so nothing re-renders.
     window.history.pushState(null, "", window.location.href);
 
-    const onPop = () => {
-      if (!pushed || stack[stack.length - 1] !== id) return;
-      pushed = false; // the browser already removed our entry
-      stack.splice(stack.indexOf(id), 1);
-      onCloseRef.current();
-    };
-    window.addEventListener("popstate", onPop);
-
     return () => {
-      window.removeEventListener("popstate", onPop);
-      const i = stack.indexOf(id);
+      const i = stack.indexOf(entry);
       if (i !== -1) stack.splice(i, 1);
       // Closed by the UI (or unmounted): drop our history entry so Back doesn't need two presses.
-      if (pushed) {
-        pushed = false;
+      if (entry.pushed) {
+        entry.pushed = false;
+        selfPops++;
         window.history.back();
       }
     };
