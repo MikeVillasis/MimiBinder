@@ -15,6 +15,7 @@ import { CardImage } from "./CardImage";
 import { openCardInspector } from "./CardInspector";
 import { PriceHistoryChart } from "./PriceHistoryChart";
 import { PriceTable } from "./PriceTable";
+import { GradedPrices } from "./GradedPrices";
 import { EntryEditor } from "./EntryEditor";
 import { useMoney } from "./hooks";
 import { effectiveSource, unitPrice } from "@/lib/pricing";
@@ -197,6 +198,7 @@ export function CardView({ id }: { id: string }) {
           )}
 
           <PriceTable card={card} />
+          <GradedPrices card={card} />
           <PriceHistoryChart card={card} />
         </div>
       </div>

@@ -89,3 +89,13 @@ describe("Japanese name table", () => {
     expect(POKEDEX_JA[1016][0]).toBe("オーガポン"); // Ogerpon
   });
 });
+
+describe("englishNameForJa", () => {
+  it("maps Japanese Pokémon card names to English", async () => {
+    const { englishNameForJa } = await import("./species");
+    expect(englishNameForJa("エーフィex", POKEDEX_EN, POKEDEX_JA)).toBe("Espeon ex");
+    expect(englishNameForJa("リザードンVMAX", POKEDEX_EN, POKEDEX_JA)).toBe("Charizard VMAX");
+    expect(englishNameForJa("ピカチュウ", POKEDEX_EN, POKEDEX_JA)).toBe("Pikachu");
+    expect(englishNameForJa("ロケット団のアポロ", POKEDEX_EN, POKEDEX_JA)).toBeUndefined();
+  });
+});

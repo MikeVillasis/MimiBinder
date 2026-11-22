@@ -1,5 +1,8 @@
 // Pure normalisers: raw TCGdex / Bank of Canada JSON → shared domain types.
 import { jaCdnImage } from "./ja-cdn-images";
+import { POKEDEX_EN } from "./pokedex-en";
+import { POKEDEX_JA } from "./pokedex-ja";
+import { englishNameForJa } from "./species";
 import type {
   CardDetail,
   CardmarketPrice,
@@ -274,6 +277,7 @@ export function normalizeCard(
     types: raw.types?.length ? raw.types : undefined,
     setId: joinId(set.id, lang),
     setName: set.name,
+    ...(lang === "ja" ? withNameEn(raw.name) : {}),
     setLogo: setLogoUrl(set.logo),
     setSymbol: setSymbolUrl(set.symbol),
     setOfficialCount: set.cardCount?.official ?? undefined,
@@ -284,6 +288,11 @@ export function normalizeCard(
     prices: normalizePrices(raw.pricing, lang),
     ...withStamped(normalizeStamped(raw.variants_detailed, lang)),
   };
+}
+
+function withNameEn(jaName: string): { nameEn?: string } {
+  const nameEn = englishNameForJa(jaName, POKEDEX_EN, POKEDEX_JA);
+  return nameEn ? { nameEn } : {};
 }
 
 function withStamped(stamped: StampedPrinting[]): { stamped?: StampedPrinting[] } {

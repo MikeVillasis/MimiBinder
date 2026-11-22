@@ -99,6 +99,8 @@ export interface CardDetail extends CardSummary {
   serieName?: string;
   variants: Variant[]; // printings that exist for this card
   prices: CardPrices;
+  /** Japanese cards: best-effort English name ("Espeon ex") for searching other sites. Absent for English cards. */
+  nameEn?: string;
   /** Stamped printings (empty or missing when there are none). */
   stamped?: StampedPrinting[];
 }

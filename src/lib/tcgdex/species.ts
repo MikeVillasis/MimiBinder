@@ -80,3 +80,23 @@ export function nameHasSuffix(name: string, suffix: CardSuffix): boolean {
   const before = n.slice(0, n.length - suffix.length);
   return before === "" || !/[a-z]$/.test(before);
 }
+
+let jaIndex: Map<string, number> | null = null;
+
+/**
+ * Best-effort English name of a Japanese Pokémon card name: "エーフィex" → "Espeon ex", "リザードンVMAX" →
+ * "Charizard VMAX". Undefined for names it can't map (Trainers, owner forms like "サブリナの…", tag teams).
+ */
+export function englishNameForJa(jaName: string, en: readonly string[], ja: readonly (readonly string[])[]): string | undefined {
+  if (!jaIndex) {
+    jaIndex = new Map();
+    ja.forEach((names, i) => names.forEach((n) => jaIndex!.has(n) || jaIndex!.set(n, i)));
+  }
+  const n = jaName.normalize("NFKC").trim();
+  const m = /^(.*?)(ex|EX|GX|VMAX|VSTAR|V|BREAK)?$/.exec(n);
+  const base = m?.[1] ?? n;
+  const i = jaIndex.get(base);
+  if (i === undefined || !en[i]) return undefined;
+  const suffix = m?.[2];
+  return suffix ? `${en[i]} ${suffix === "EX" ? "EX" : suffix}` : en[i];
+}

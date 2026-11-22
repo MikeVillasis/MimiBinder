@@ -158,10 +158,13 @@ export function ListRow({
   subtitle,
   trailing,
   chevron,
+  external,
   ariaLabel,
   className,
 }: {
   href?: string;
+  /** `href` is another site: plain <a> opening in a new tab, with an "opens elsewhere" icon. */
+  external?: boolean;
   onClick?: () => void;
   leading?: ReactNode;
   title: ReactNode;
@@ -181,7 +184,13 @@ export function ListRow({
         {subtitle && <span className="mt-0.5 block truncate text-[13px] text-muted">{subtitle}</span>}
       </span>
       {trailing && <span className="shrink-0 text-right text-sm tabular-nums">{trailing}</span>}
-      {showChevron && <Chevron className="-mr-1 shrink-0 text-muted/70" />}
+      {external ? (
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-muted/70" aria-hidden="true">
+          <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+        </svg>
+      ) : (
+        showChevron && <Chevron className="-mr-1 shrink-0 text-muted/70" />
+      )}
     </>
   );
   const rowCls = "flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left";
@@ -193,7 +202,11 @@ export function ListRow({
         className,
       )}
     >
-      {href ? (
+      {href && external ? (
+        <a href={href} target="_blank" rel="noopener noreferrer" aria-label={ariaLabel} className={cx(rowCls, hoverCls)}>
+          {inner}
+        </a>
+      ) : href ? (
         <Link href={href} aria-label={ariaLabel} className={cx(rowCls, hoverCls)}>
           {inner}
         </Link>
