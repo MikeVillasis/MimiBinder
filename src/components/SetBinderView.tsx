@@ -8,7 +8,7 @@ import { useEntries } from "@/lib/db";
 import { langOf, splitId } from "@/lib/lang";
 import { CardTile, QtyBadge } from "./CardTile";
 import { useAsync } from "./hooks";
-import { CardGridSkeleton, ErrorState, ProgressBar, Segmented, Skeleton } from "./ui";
+import { CardGridSkeleton, ErrorState, ProgressBar, Segmented, SetLogo, Skeleton, Stat, Surface } from "./ui";
 
 type Show = "all" | "owned" | "missing";
 
@@ -38,17 +38,23 @@ export function SetBinderView({ setId }: { setId: string }) {
 
   return (
     <div>
-      <Link href={langOf(setId) === "ja" ? "/binders?tab=sets&lang=ja" : "/binders"} className="mb-2 inline-flex min-h-11 items-center text-sm text-muted hover:text-fg">
-        ← Binders
+      <Link href={langOf(setId) === "ja" ? "/binders?tab=sets&lang=ja" : "/binders"} className="-ml-1 mb-1 inline-flex min-h-11 items-center gap-0.5 rounded-ui-sm px-1 text-sm font-medium text-muted hover:text-fg">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M15 6l-6 6 6 6" />
+        </svg>
+        Binders
       </Link>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="truncate text-2xl font-extrabold tracking-tight md:text-3xl">{set.name}</h1>
-          {langOf(setId) === "ja" && <p className="text-xs font-semibold tracking-wide text-muted">Set code {splitId(setId).raw}</p>}
-          <p className="text-sm text-muted">
-            {set.serieName}
-            {set.releaseDate ? ` · ${set.releaseDate}` : ""}
-          </p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <SetLogo name={set.name} logo={set.logo} symbol={set.symbol} fallbackText={langOf(setId) === "ja" ? splitId(setId).raw : undefined} className="h-12 w-16" />
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-bold leading-tight tracking-[-0.02em] md:text-3xl">{set.name}</h1>
+            <p className="truncate text-sm text-muted">
+              {langOf(setId) === "ja" && `Set code ${splitId(setId).raw} · `}
+              {set.serieName}
+              {set.releaseDate ? ` · ${set.releaseDate}` : ""}
+            </p>
+          </div>
         </div>
         <Segmented<Show>
           label="Show"
@@ -57,20 +63,20 @@ export function SetBinderView({ setId }: { setId: string }) {
           options={[{ value: "all", label: "All" }, { value: "owned", label: "Owned" }, { value: "missing", label: "Missing" }]}
         />
       </div>
-      <div className="mb-5 rounded-2xl border border-line bg-surface p-4">
-        <div className="mb-2 flex items-baseline justify-between">
-          <span className="text-sm font-semibold">Completion</span>
-          <span className="text-sm tabular-nums text-muted">
-            {c.owned}/{c.total} · <span className="font-bold text-accent">{Math.round(c.percent)}%</span>
-          </span>
+      <Surface as="section" aria-label="Completion" padded className="mb-5">
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <Stat inset label="Completion" value={`${Math.round(c.percent)}%`} size="lg" tone={c.percent >= 100 ? "good" : undefined} />
+          <div className="pb-0.5 text-right text-sm tabular-nums text-muted">
+            <span className="text-base font-semibold text-fg">{c.owned}</span> / {c.total} cards
+          </div>
         </div>
+        <ProgressBar percent={c.percent} label={`${set.name} completion`} />
         {c.secret > 0 && (
-          <p className="mb-2 text-xs text-muted">
+          <p className="mt-3 text-[13px] text-muted">
             +{c.secret} secret rare{c.secret === 1 ? "" : "s"} owned, not counted toward completion
           </p>
         )}
-        <ProgressBar percent={c.percent} label={`${set.name} completion`} />
-      </div>
+      </Surface>
       <div className="grid grid-cols-3 gap-x-2.5 gap-y-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7">
         {cards.map((card) => (
           <CardTile

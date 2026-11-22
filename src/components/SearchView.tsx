@@ -7,7 +7,7 @@ import { searchCards } from "@/lib/api-client";
 import { parseLang } from "@/lib/lang";
 import { LANG_LABELS, type CardSummary, type Lang } from "@/lib/types";
 import { CardTile } from "./CardTile";
-import { Button, CardGridSkeleton, EmptyState, ErrorState, Segmented, inputCls } from "./ui";
+import { Button, CardGridSkeleton, EmptyState, ErrorState, PageHeader, Segmented, buttonCls, inputCls } from "./ui";
 
 export function SearchView() {
   const router = useRouter();
@@ -23,6 +23,7 @@ export function SearchView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const reqId = useRef(0);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const run = (query: string, pg: number, l: Lang = lang) => {
     const id = ++reqId.current;
@@ -72,50 +73,77 @@ export function SearchView() {
   }, [input, lang]);
 
   const shown = q ? cards : [];
+  const browseHref = `/binders?tab=sets${lang === "ja" ? "&lang=ja" : ""}`;
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-extrabold tracking-tight md:text-3xl">Search</h1>
-      <div className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-10 -mx-4 bg-bg/90 px-4 pb-3 pt-1 backdrop-blur md:static md:mx-0 md:bg-transparent md:px-0">
-        <div className="mb-2">
-          <Segmented<Lang>
-            label="Card language"
-            value={lang}
-            onChange={(l) => syncUrl(input.trim(), l)}
-            options={(["en", "ja"] as Lang[]).map((l) => ({ value: l, label: LANG_LABELS[l] }))}
-          />
-        </div>
-        <div className="flex gap-2">
+      <PageHeader title="Search" />
+      <div className="sticky top-[calc(env(safe-area-inset-top)+3.25rem)] z-10 -mx-4 bg-bg/90 px-4 pb-3 pt-1 backdrop-blur md:static md:mx-0 md:bg-transparent md:px-0 md:backdrop-blur-none">
+        <div className="relative">
+          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.5-3.5" />
+            </svg>
+          </span>
           <input
+            ref={inputRef}
             type="search"
             inputMode="search"
             enterKeyHint="search"
             autoComplete="off"
             aria-label="Search cards by name or number"
-            placeholder={lang === "ja" ? "Search by name, e.g. Pikachu or ピカチュウ" : "Name or number, e.g. Zorua 189 or 189/159"}
+            placeholder={lang === "ja" ? "Name, e.g. Pikachu or ピカチュウ" : "Name or number, e.g. Zorua 189"}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className={inputCls}
+            className={`${inputCls} min-h-12 rounded-ui-lg bg-surface pl-12 pr-12 text-base elev-1 [&::-webkit-search-cancel-button]:appearance-none`}
           />
-          <Link
-            href={`/binders?tab=sets${lang === "ja" ? "&lang=ja" : ""}`}
-            className="inline-flex min-h-11 shrink-0 items-center rounded-xl border border-line bg-surface-2 px-4 text-sm font-semibold hover:bg-line"
-          >
+          {input && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => {
+                setInput("");
+                inputRef.current?.focus();
+              }}
+              className="ui-motion absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-muted hover:text-fg"
+            >
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-3">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </span>
+            </button>
+          )}
+        </div>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <Segmented<Lang>
+            size="sm"
+            label="Card language"
+            value={lang}
+            onChange={(l) => syncUrl(input.trim(), l)}
+            options={(["en", "ja"] as Lang[]).map((l) => ({ value: l, label: LANG_LABELS[l] }))}
+          />
+          <Link href={browseHref} className={buttonCls({ variant: "ghost", size: "sm" })}>
             Browse sets
           </Link>
         </div>
       </div>
 
       {!q && (
-        <EmptyState title="Find a card" body={
+        <EmptyState
+          title="Find a card"
+          icon={
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.5-3.5" />
+            </svg>
+          }
+          body={
             lang === "ja"
               ? "Search Japanese cards by English Pokemon name (for example “Pikachu”) or by Japanese name. Trainer and Energy cards need the Japanese name."
               : "Type a Pokemon name or a card number (like “Zorua 189”, “#189” or “189/159”) to search every card, or browse by set to see full checklists."
           }
-        >
-          <Link href={`/binders?tab=sets${lang === "ja" ? "&lang=ja" : ""}`} className="inline-flex min-h-11 items-center rounded-xl bg-accent px-4 font-bold text-accent-fg">
-            Browse sets
-          </Link>
-        </EmptyState>
+        />
       )}
 
       {q && error && <ErrorState message={error} onRetry={() => run(q, cards.length ? page + 1 : 1)} />}
@@ -123,13 +151,19 @@ export function SearchView() {
       {q && !error && loading && shown.length === 0 && <CardGridSkeleton />}
 
       {q && !error && !loading && shown.length === 0 && <EmptyState
+          icon={
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.5-3.5M9 11h4" />
+            </svg>
+          }
           title="No cards found"
           body={lang === "ja" ? `Nothing matched “${q}”. Try the English Pokemon name, or the Japanese name for Trainer and Energy cards.` : `Nothing matched “${q}”. Try a shorter name, or check the card number.`}
         />}
 
       {shown.length > 0 && (
         <>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {shown.map((c) => (
               <CardTile key={c.id} id={c.id} name={c.name} localId={c.localId} image={c.image} />
             ))}

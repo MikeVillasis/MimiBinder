@@ -91,7 +91,7 @@ export function CornerEditor({
   return (
     <div ref={parentRef} className="relative">
       <div className="mx-auto" style={{ width: `min(100%, calc(68dvh * ${width / height}))` }}>
-        <div ref={wrapRef} className="relative select-none overflow-visible rounded-lg bg-surface-2" style={{ aspectRatio: `${width} / ${height}` }}>
+        <div ref={wrapRef} className="relative select-none overflow-visible rounded-ui-md bg-surface-2" style={{ aspectRatio: `${width} / ${height}` }}>
           <canvas ref={canvasRef} className="absolute inset-0 h-full w-full rounded-lg" role="img" aria-label="Your photo with the detected card outline" />
           <svg viewBox={`0 0 ${width} ${height}`} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
             <polygon points={quad.map((p) => `${p.x},${p.y}`).join(" ")} fill="rgb(255 255 255 / 0.08)" stroke="black" strokeOpacity="0.6" strokeWidth="5" vectorEffect="non-scaling-stroke" />

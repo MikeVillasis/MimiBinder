@@ -163,7 +163,7 @@ export function ResultEditor({
       </div>
 
       <div ref={parentRef} className="relative">
-        <div className="mx-auto max-h-[72dvh] overflow-auto rounded-lg border border-line bg-surface-2" style={{ width: `min(100%, calc(72dvh * ${W / H}))` }}>
+        <div className="mx-auto max-h-[72dvh] overflow-auto rounded-ui-md bg-surface-2 elev-0" style={{ width: `min(100%, calc(72dvh * ${W / H}))` }}>
           <div ref={wrapRef} className="relative select-none" style={{ width: `${zoom * 100}%`, aspectRatio: `${W} / ${H}` }}>
             <canvas
               ref={(el) => {
@@ -239,7 +239,7 @@ export function ResultEditor({
         </span>
       </div>
 
-      <label className="flex flex-col gap-1 text-sm font-medium">
+      <label className="flex flex-col gap-1.5 text-[13px] font-medium text-muted">
         Line to adjust
         <select
           value={sel ? selId(sel) : ""}
@@ -247,7 +247,7 @@ export function ResultEditor({
             const [side, kind] = e.target.value.split(":");
             setSel(e.target.value ? { side: side as Side, kind: kind as Kind } : null);
           }}
-          className="min-h-11 rounded-xl border border-line bg-surface-2 px-3 text-sm text-fg"
+          className="ui-motion min-h-11 rounded-ui-md border border-muted/45 bg-surface-2 px-3 text-sm text-fg focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/20"
         >
           <option value="">None (tap a line on the card)</option>
           {allLines.map((s) => (
@@ -257,7 +257,7 @@ export function ResultEditor({
           ))}
         </select>
       </label>
-      <p className="text-xs text-muted">
+      <p className="text-[13px] text-muted">
         Tap a line, then drag a round end handle to move that end, or the square handle to slide the whole line. Arrow keys nudge a focused handle (Shift for bigger steps).
       </p>
     </div>

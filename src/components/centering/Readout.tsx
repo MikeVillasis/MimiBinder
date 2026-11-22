@@ -5,9 +5,9 @@ import { WARN_Q } from "./ResultEditor";
 function Axis({ title, axis, name }: { title: string; axis: AxisCentering; name: "lr" | "tb" }) {
   const w = widths(axis, name);
   return (
-    <div className="rounded-xl border border-line bg-surface-2 p-3">
-      <div className="text-xs font-medium uppercase tracking-wide text-muted">{title}</div>
-      <div className="mt-0.5 text-3xl font-extrabold tabular-nums text-accent">{ratio(axis.worst)}</div>
+    <div className="rounded-ui-md bg-surface-2 p-3.5 elev-0">
+      <div className="text-[13px] font-medium text-muted">{title}</div>
+      <div className="mt-1 text-3xl font-bold tracking-[-0.02em] tabular-nums">{ratio(axis.worst)}</div>
       <div className="mt-1 text-sm">
         {sideLabel(axis.heavySide)} border is wider.
       </div>
@@ -37,7 +37,7 @@ export function Readout({ result, fit, onCheck }: { result: CenteringResult | nu
         </p>
       )}
       {bad.length > 0 && (
-        <div role="status" className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-sm">
+        <div role="status" className="rounded-ui-md bg-danger/10 p-3 text-sm">
           <p className="font-semibold text-danger">Check this line</p>
           <p className="mt-0.5 text-muted">The edge was hard to find on these sides (dashed on the card). Zoom in and nudge the lines if they are off.</p>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -46,7 +46,7 @@ export function Readout({ result, fit, onCheck }: { result: CenteringResult | nu
                 key={s}
                 type="button"
                 onClick={() => onCheck(s)}
-                className="inline-flex min-h-11 items-center rounded-xl border border-danger/40 px-3 text-sm font-semibold text-danger hover:bg-danger/15"
+                className="ui-motion ui-press inline-flex min-h-11 items-center rounded-ui-md bg-danger/12 px-3 text-sm font-semibold text-danger hover:bg-danger/20"
               >
                 {sideLabel(s)} side
               </button>

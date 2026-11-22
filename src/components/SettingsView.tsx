@@ -1,58 +1,89 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { exportCollection, importCollection, updateSettings, useSettings } from "@/lib/db";
 import { THEMES, setTheme, useTheme, type ThemeMeta } from "@/lib/themes";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useAuth, useSync, verifyEmailCode } from "@/lib/sync";
 import type { Currency, PriceSource } from "@/lib/types";
-import { Button, ConfirmDialog, PageHeader, Segmented, inputCls } from "./ui";
+import { Button, ConfirmDialog, PageHeader, Segmented, SectionHeader, Surface, inputCls } from "./ui";
 
-function Card({ title, children, desc }: { title: string; desc?: string; children: ReactNode }) {
+/** An iOS-style grouped section: a title, one Surface whose rows are divided by hairlines, a muted footnote. */
+function Group({ title, footer, children }: { title: string; footer?: ReactNode; children: ReactNode }) {
+  const id = useId();
   return (
-    <section className="rounded-2xl border border-line bg-surface p-4 md:p-5">
-      <h2 className="text-base font-bold">{title}</h2>
-      {desc && <p className="mb-3 mt-0.5 text-sm text-muted">{desc}</p>}
-      <div className={desc ? "" : "mt-3"}>{children}</div>
+    <section aria-labelledby={id}>
+      <SectionHeader id={id} title={title} className="mb-2 px-1" />
+      <Surface className="divide-y divide-line/60 overflow-hidden">{children}</Surface>
+      {footer && <p className="mt-2 px-1 text-[13px] leading-relaxed text-muted">{footer}</p>}
     </section>
   );
+}
+
+/** A label (and optional hint) on the left, a control or value on the right. */
+function Row({ label, hint, children }: { label: string; hint?: string; children?: ReactNode }) {
+  return (
+    <div className="flex min-h-14 items-center justify-between gap-3 px-4 py-2.5">
+      <div className="min-w-0">
+        <div className="text-[15px] font-medium">{label}</div>
+        {hint && <div className="text-[13px] text-muted">{hint}</div>}
+      </div>
+      {children != null && <div className="min-w-0 shrink-0 text-right text-sm">{children}</div>}
+    </div>
+  );
+}
+
+function Pad({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`flex flex-col gap-3 p-4 ${className}`}>{children}</div>;
 }
 
 export function SettingsView() {
   const settings = useSettings();
   const configured = isSupabaseConfigured();
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4">
-      <PageHeader title="Settings" />
+    <div className="mx-auto flex max-w-2xl flex-col gap-7">
+      <div className="-mb-2">
+        <PageHeader title="Settings" />
+      </div>
       <ThemeCard />
-      <Card title="Currency" desc="All prices are converted to this currency using Bank of Canada rates.">
-        <Segmented<Currency>
-          label="Currency"
-          value={settings.currency}
-          onChange={(currency) => updateSettings({ currency })}
-          options={[{ value: "CAD", label: "CAD" }, { value: "USD", label: "USD" }]}
-        />
-      </Card>
-      <Card title="Price source" desc="TCGPlayer is in USD, Cardmarket is in EUR. Both are converted for display.">
-        <Segmented<PriceSource>
-          label="Price source"
-          value={settings.priceSource}
-          onChange={(priceSource) => updateSettings({ priceSource })}
-          options={[{ value: "tcgplayer", label: "TCGPlayer" }, { value: "cardmarket", label: "Cardmarket" }]}
-        />
-      </Card>
+      <Group title="Prices" footer="All prices are converted to your currency using Bank of Canada rates. TCGPlayer is in USD, Cardmarket is in EUR.">
+        <Row label="Currency">
+          <Segmented<Currency>
+            size="sm"
+            label="Currency"
+            value={settings.currency}
+            onChange={(currency) => updateSettings({ currency })}
+            options={[{ value: "CAD", label: "CAD" }, { value: "USD", label: "USD" }]}
+          />
+        </Row>
+        <Row label="Price source">
+          <Segmented<PriceSource>
+            size="sm"
+            label="Price source"
+            value={settings.priceSource}
+            onChange={(priceSource) => updateSettings({ priceSource })}
+            options={[{ value: "tcgplayer", label: "TCGPlayer" }, { value: "cardmarket", label: "Cardmarket" }]}
+          />
+        </Row>
+      </Group>
       {configured ? (
         <AccountCard />
       ) : (
-        <Card title="Guest mode">
-          <p className="text-sm text-muted">
-            Cloud sync is not set up for this app, so everything you add stays on this device only. Use the export below to back up your collection or move it to another device.
-          </p>
-        </Card>
+        <Group title="Account and sync">
+          <Pad>
+            <p className="text-sm font-semibold">Guest mode</p>
+            <p className="text-sm text-muted">
+              Cloud sync is not set up for this app, so everything you add stays on this device only. Use the export below to back up your collection or move it to another device.
+            </p>
+          </Pad>
+        </Group>
       )}
       <DataCard />
-      <Card title="About MimiBinder">
-        <div className="flex flex-col gap-2 text-sm text-muted">
+      <section aria-labelledby="about-h" className="px-1">
+        <h2 id="about-h" className="mb-2 text-lg font-semibold tracking-tight">
+          About MimiBinder
+        </h2>
+        <div className="flex flex-col gap-2.5 text-[13px] leading-relaxed text-muted">
           <p>
             MimiBinder is a free hobby project: no ads, no subscriptions, no paid features, and no intention to ever
             sell it or your data. Without signing in, your collection is stored only in this browser. Account sign-in
@@ -82,7 +113,7 @@ export function SettingsView() {
             </a>
           </p>
         </div>
-      </Card>
+      </section>
     </div>
   );
 }
@@ -95,9 +126,11 @@ function creditText(t: ThemeMeta) {
 
 function ThemeCard() {
   const current = useTheme();
+  const id = useId();
   return (
-    <Card title="Theme" desc="Pick a look for this device. Your choice is saved in this browser.">
-      <div role="group" aria-label="Theme" className="grid grid-cols-2 gap-3">
+    <section aria-labelledby={id}>
+      <SectionHeader id={id} title="Appearance" subtitle="Pick a look for this device. Your choice is saved in this browser." className="px-1" />
+      <div role="group" aria-label="Theme" className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {THEMES.map((t) => {
           const on = t.id === current.id;
           const [bg, surface, accent, ...extras] = t.swatches;
@@ -107,11 +140,11 @@ function ThemeCard() {
               type="button"
               aria-pressed={on}
               onClick={() => setTheme(t.id)}
-              className={`relative flex flex-col gap-2 rounded-2xl border bg-surface p-2.5 text-left transition ${
-                on ? "border-accent ring-2 ring-accent" : "border-muted/75 hover:border-accent/60"
+              className={`ui-motion ui-press relative flex flex-col gap-2 rounded-ui-lg bg-surface p-2.5 text-left ${
+                on ? "elev-2 outline outline-2 outline-accent" : "elev-1 hover:elev-2"
               }`}
             >
-              <div className="flex h-20 flex-col justify-between rounded-xl p-2" style={{ background: bg }} aria-hidden="true">
+              <div className="flex h-20 flex-col justify-between rounded-ui-md p-2" style={{ background: bg }} aria-hidden="true">
                 <div className="flex items-center gap-1.5 rounded-lg p-1.5" style={{ background: surface }}>
                   <span className="h-3.5 w-3.5 rounded-full" style={{ background: accent }} />
                   <span className="h-1.5 flex-1 rounded-full opacity-40" style={{ background: extras[0] ?? accent }} />
@@ -122,14 +155,14 @@ function ThemeCard() {
                   ))}
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm font-bold">{t.name}</span>
-                <span className="text-xs font-medium uppercase tracking-wide text-muted">{t.mode}</span>
+              <div className="flex items-center gap-2 px-0.5">
+                <span className="text-[15px] font-semibold">{t.name}</span>
+                <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium capitalize text-muted">{t.mode}</span>
               </div>
-              <p className="text-xs text-muted">{t.description}</p>
-              {t.credit && <p className="text-xs leading-snug text-muted">{creditText(t)}</p>}
+              <p className="px-0.5 text-[13px] text-muted">{t.description}</p>
+              {t.credit && <p className="px-0.5 text-xs leading-snug text-muted">{creditText(t)}</p>}
               {on && (
-                <span className="absolute right-2.5 top-2.5 flex h-6 w-6 items-center justify-center rounded-full bg-accent text-accent-fg" aria-hidden="true">
+                <span className="absolute right-4 top-4 flex h-6 w-6 items-center justify-center rounded-full bg-accent text-accent-fg shadow" aria-hidden="true">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M5 12.5l4.5 4.5L19 7.5" />
                   </svg>
@@ -139,7 +172,7 @@ function ThemeCard() {
           );
         })}
       </div>
-    </Card>
+    </section>
   );
 }
 
@@ -166,50 +199,52 @@ function AccountCard() {
   };
 
   return (
-    <Card title="Account & sync" desc="Sign in to sync your collection across devices. Without an account, data stays on this device.">
+    <Group title="Account and sync" footer={auth.user ? undefined : "Sign in to sync your collection across devices. Without an account, data stays on this device."}>
       {auth.user ? (
-        <div className="flex flex-col gap-3">
-          <div className="text-sm">
-            Signed in as <span className="font-semibold">{auth.user.email ?? "owner"}</span>
-          </div>
-          <dl className="grid grid-cols-2 gap-2 text-sm">
-            <dt className="text-muted">Status</dt>
-            <dd className="font-medium capitalize" role="status">
+        <>
+          <Row label="Signed in as">
+            <span className="font-medium">{auth.user.email ?? "owner"}</span>
+          </Row>
+          <Row label="Status">
+            <span className="font-medium capitalize text-muted" role="status">
               {sync.status}
-            </dd>
-            <dt className="text-muted">Last synced</dt>
-            <dd className="font-medium">{sync.lastSyncedAt ? new Date(sync.lastSyncedAt).toLocaleString() : "Never"}</dd>
-          </dl>
-          {error && (
-            <p role="alert" className="text-sm text-danger">
-              {error}
-            </p>
-          )}
-          <div className="flex gap-2">
-            <Button
-              disabled={syncing}
-              onClick={async () => {
-                setSyncing(true);
-                setError(undefined);
-                try {
-                  await sync.syncNow();
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : "Sync failed.");
-                } finally {
-                  setSyncing(false);
-                }
-              }}
-            >
-              {syncing ? "Syncing…" : "Sync now"}
-            </Button>
-            <Button variant="secondary" onClick={() => auth.signOut()}>
-              Sign out
-            </Button>
-          </div>
-        </div>
+            </span>
+          </Row>
+          <Row label="Last synced">
+            <span className="text-muted">{sync.lastSyncedAt ? new Date(sync.lastSyncedAt).toLocaleString() : "Never"}</span>
+          </Row>
+          <Pad>
+            {error && (
+              <p role="alert" className="text-sm text-danger">
+                {error}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                disabled={syncing}
+                onClick={async () => {
+                  setSyncing(true);
+                  setError(undefined);
+                  try {
+                    await sync.syncNow();
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Sync failed.");
+                  } finally {
+                    setSyncing(false);
+                  }
+                }}
+              >
+                {syncing ? "Syncing…" : "Sync now"}
+              </Button>
+              <Button variant="secondary" onClick={() => auth.signOut()}>
+                Sign out
+              </Button>
+            </div>
+          </Pad>
+        </>
       ) : state === "sent" ? (
         <form
-          className="flex flex-col gap-3"
+          className="flex flex-col gap-3 p-4"
           onSubmit={async (e) => {
             e.preventDefault();
             setError(undefined);
@@ -234,7 +269,7 @@ function AccountCard() {
           </Button>
         </form>
       ) : (
-        <form onSubmit={send} className="flex flex-col gap-3">
+        <form onSubmit={send} className="flex flex-col gap-3 p-4">
           <input type="email" required autoComplete="email" aria-label="Email address" placeholder="you@example.com" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} />
           {error && (
             <p role="alert" className="text-sm text-danger">
@@ -246,7 +281,7 @@ function AccountCard() {
           </Button>
         </form>
       )}
-    </Card>
+    </Group>
   );
 }
 
@@ -273,46 +308,52 @@ function DataCard() {
   };
 
   return (
-    <Card title="Your data" desc="Export a JSON backup or import one from another device.">
-      <div className="flex flex-col gap-4">
-        <Button variant="secondary" onClick={doExport} className="self-start">
+    <>
+    <Group title="Your data" footer="Export a JSON backup or import one from another device.">
+      <Row label="Export backup" hint="Download your collection as JSON">
+        <Button variant="secondary" size="sm" onClick={doExport}>
           Export JSON
         </Button>
-        <div className="flex flex-col gap-3 border-t border-line pt-4">
+      </Row>
+      <Pad>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[15px] font-medium">Import backup</span>
           <Segmented<"merge" | "replace">
+            size="sm"
             label="Import mode"
             value={mode}
             onChange={setMode}
             options={[{ value: "merge", label: "Merge" }, { value: "replace", label: "Replace" }]}
           />
-          <p className="text-xs text-muted">
-            {mode === "merge" ? "Merge keeps your current data and adds or updates entries from the file." : "Replace deletes your current collection and uses only the file."}
-          </p>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/json,.json"
-            aria-label="Choose backup file"
-            className="block w-full text-sm text-muted file:mr-3 file:min-h-11 file:rounded-xl file:border-0 file:bg-surface-2 file:px-4 file:font-semibold file:text-fg"
-            onChange={async (e) => {
-              const f = e.target.files?.[0];
-              if (!f) return;
-              setMsg(undefined);
-              try {
-                setPending(await f.text());
-                setFileName(f.name);
-              } catch {
-                setMsg({ ok: false, text: "Could not read that file." });
-              }
-            }}
-          />
         </div>
+        <p className="text-[13px] text-muted">
+          {mode === "merge" ? "Merge keeps your current data and adds or updates entries from the file." : "Replace deletes your current collection and uses only the file."}
+        </p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          aria-label="Choose backup file"
+          className="block w-full text-sm text-muted file:mr-3 file:min-h-11 file:rounded-ui-md file:border-0 file:bg-surface-2 file:px-4 file:font-semibold file:text-fg hover:file:bg-surface-3"
+          onChange={async (e) => {
+            const f = e.target.files?.[0];
+            if (!f) return;
+            setMsg(undefined);
+            try {
+              setPending(await f.text());
+              setFileName(f.name);
+            } catch {
+              setMsg({ ok: false, text: "Could not read that file." });
+            }
+          }}
+        />
         {msg && (
           <p role={msg.ok ? "status" : "alert"} className={msg.ok ? "text-sm text-good" : "text-sm text-danger"}>
             {msg.text}
           </p>
         )}
-      </div>
+      </Pad>
+    </Group>
       <ConfirmDialog
         open={pending !== undefined}
         danger={mode === "replace"}
@@ -336,6 +377,6 @@ function DataCard() {
           }
         }}
       />
-    </Card>
+    </>
   );
 }

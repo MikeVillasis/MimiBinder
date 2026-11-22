@@ -1,6 +1,6 @@
 import { PSA_CENTERING, psaCeiling } from "@/lib/centering";
 import type { CenteringResult } from "@/lib/centering";
-import { Button } from "../ui";
+import { Button, Surface } from "../ui";
 import { ratio } from "./format";
 
 function worstOf(r: CenteringResult | null) {
@@ -33,14 +33,15 @@ export function Summary({ front, back, frontSkipped, onReset }: { front: Centeri
   const fw = worstOf(front);
   const bw = worstOf(back);
   return (
-    <section aria-labelledby="sum-h" className="rounded-2xl border border-accent/30 bg-surface p-4 md:p-5">
-      <h2 id="sum-h" className="text-xs font-medium uppercase tracking-wide text-muted">
+    <Surface as="section" aria-labelledby="sum-h" padded="lg">
+      <h2 id="sum-h" className="text-lg font-semibold tracking-tight">
         Centering ceiling
       </h2>
       {ceiling && (
-        <div className="mt-1" role="status">
-          <p className="text-2xl font-extrabold tracking-tight">
-            Best PSA grade centering allows: <span className="text-accent">{ceiling.grade}</span> ({ceiling.label})
+        <div className="mt-3 rounded-ui-md bg-accent-soft p-4" role="status">
+          <p className="text-[13px] font-medium text-muted">Best PSA grade centering allows</p>
+          <p className="mt-1 text-3xl font-bold tracking-[-0.02em]">
+            <span className="text-accent">{ceiling.grade}</span> <span className="text-lg font-semibold text-fg">({ceiling.label})</span>
           </p>
           {ceiling.limitedBy && <p className="mt-1 text-sm text-muted">Limited by {ceiling.limitedBy}.</p>}
           {frontSkipped && <p className="mt-1 text-sm text-muted">Front centering is not measured (full-art card).</p>}
@@ -51,9 +52,9 @@ export function Summary({ front, back, frontSkipped, onReset }: { front: Centeri
 
       <div className="mt-4 overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <caption className="pb-1 text-left text-xs text-muted">PSA centering limits (larger border share, worst point) and this card</caption>
+          <caption className="pb-2 text-left text-[13px] text-muted">PSA centering limits (larger border share, worst point) and this card</caption>
           <thead>
-            <tr className="border-b border-line text-xs text-muted">
+            <tr className="border-b border-line/60 text-xs text-muted">
               <th scope="col" className="px-2 py-1.5 font-medium">PSA</th>
               <th scope="col" className="px-2 py-1.5 font-medium">Front</th>
               <th scope="col" className="px-2 py-1.5 font-medium">Back</th>
@@ -61,7 +62,7 @@ export function Summary({ front, back, frontSkipped, onReset }: { front: Centeri
           </thead>
           <tbody>
             {PSA_CENTERING.map((row) => (
-              <tr key={row.grade} className={`border-b border-line/60 ${ceiling && ceiling.grade === row.grade ? "bg-accent/10" : ""}`}>
+              <tr key={row.grade} className={`border-b border-line/40 last:border-0 ${ceiling && ceiling.grade === row.grade ? "bg-accent-soft" : ""}`}>
                 <th scope="row" className="px-2 py-2 font-semibold">
                   {row.grade} <span className="text-xs font-normal text-muted">{row.label}</span>
                 </th>
@@ -72,11 +73,11 @@ export function Summary({ front, back, frontSkipped, onReset }: { front: Centeri
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-xs text-muted tabular-nums">
+      <p className="mt-2 text-[13px] text-muted tabular-nums">
         This card: front {fw != null ? `${ratio(fw)} (worst axis)` : "not measured"} · back {bw != null ? `${ratio(bw)} (worst axis)` : "not measured"}
       </p>
 
-      <ul className="mt-4 flex list-disc flex-col gap-1.5 pl-5 text-sm text-muted">
+      <ul className="mt-4 flex list-disc flex-col gap-1.5 pl-5 text-[13px] leading-relaxed text-muted">
         <li>This is a ceiling, not a prediction: it is the best grade centering allows, not the grade you will get.</li>
         <li>Phone photos are good to about ±1 point of centering, so a result close to a limit could go either way.</li>
         <li>PSA judges the worst point along the edges, so that is what we measure.</li>
@@ -90,6 +91,6 @@ export function Summary({ front, back, frontSkipped, onReset }: { front: Centeri
           Start over
         </Button>
       </div>
-    </section>
+    </Surface>
   );
 }

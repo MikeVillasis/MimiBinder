@@ -6,7 +6,7 @@ import { getCard } from "@/lib/api-client";
 import type { BorderFit, Face, Quad, RGBAImage, Side } from "@/lib/centering";
 import type { CardDetail } from "@/lib/types";
 import { CardImage } from "../CardImage";
-import { Button, PageHeader } from "../ui";
+import { Button, PageHeader, SectionHeader, Surface } from "../ui";
 import { CaptureButtons } from "./CaptureButtons";
 import { CornerEditor } from "./CornerEditor";
 import { decodePhoto, type Decoded } from "./decode";
@@ -62,10 +62,10 @@ const TIPS = [
 
 function Spinner({ label }: { label: string }) {
   return (
-    <div role="status" className="flex flex-col items-center gap-3 rounded-2xl border border-line bg-surface px-6 py-12 text-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-line border-t-accent" aria-hidden="true" />
+    <Surface role="status" className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-surface-3 border-t-accent" aria-hidden="true" />
       <p className="text-sm font-medium">{label}</p>
-    </div>
+    </Surface>
   );
 }
 
@@ -90,16 +90,16 @@ function CardHeader() {
   if (!id) return null;
   const card = state.id === id ? state.card : undefined;
   return (
-    <div className="mb-4 flex items-center gap-3 rounded-2xl border border-line bg-surface p-3">
+    <Surface padded="sm" className="mb-1 flex items-center gap-3">
       <div className="w-14 shrink-0">{card ? <CardImage image={card.image} name={card.name} /> : <div className="skeleton aspect-[63/88] w-full rounded-lg" aria-hidden="true" />}</div>
       <div className="min-w-0 flex-1">
-        <div className="text-xs font-medium uppercase tracking-wide text-muted">Checking</div>
-        <div className="truncate font-bold">{card ? card.name : state.id === id && state.failed ? id : "Loading card…"}</div>
+        <div className="text-xs font-medium tracking-wide text-muted">Checking</div>
+        <div className="truncate font-semibold">{card ? card.name : state.id === id && state.failed ? id : "Loading card…"}</div>
         <Link href={`/card/${encodeURIComponent(id)}`} className="inline-flex min-h-11 items-center text-sm font-medium text-accent">
           ← Back to card
         </Link>
       </div>
-    </div>
+    </Surface>
   );
 }
 
@@ -230,7 +230,11 @@ export function CenteringTool() {
 
       <CardHeader />
 
-      <div role="tablist" aria-label="Card face" className="grid grid-cols-2 gap-2 rounded-2xl border border-line bg-surface p-1">
+      <div
+        role="tablist"
+        aria-label="Card face"
+        className="grid grid-cols-2 gap-1 rounded-ui-md bg-surface-2 p-1 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-line)_45%,transparent)]"
+      >
         {(["front", "back"] as Face[]).map((face) => (
           <button
             key={face}
@@ -240,23 +244,23 @@ export function CenteringTool() {
             aria-selected={tab === face}
             aria-controls="face-panel"
             onClick={() => setTab(face)}
-            className={`flex min-h-11 flex-col items-center justify-center rounded-xl px-3 py-1 text-sm font-bold capitalize ${tab === face ? "bg-accent text-accent-fg" : "text-muted hover:bg-surface-2 hover:text-fg"}`}
+            className={`ui-motion flex min-h-11 flex-col items-center justify-center rounded-[10px] px-3 py-1 text-sm capitalize ${tab === face ? "bg-surface-3 font-semibold text-fg elev-1" : "font-medium text-muted hover:text-fg"}`}
           >
             {face}
-            <span className="text-xs font-medium normal-case opacity-90">{tabLabel(face) || "Not measured"}</span>
+            <span className={`text-xs font-medium normal-case ${tabLabel(face) === "Measured" ? "text-good" : "text-muted"}`}>{tabLabel(face) || "Not measured"}</span>
           </button>
         ))}
       </div>
 
       <div id="face-panel" role="tabpanel" aria-labelledby={`tab-${tab}`} className="flex flex-col gap-4">
         {tab === "front" && frontSkipped ? (
-          <div className="rounded-2xl border border-line bg-surface p-4">
+          <Surface padded>
             <p className="font-semibold">Front centering is not measured.</p>
             <p className="mt-1 text-sm text-muted">Full-art cards have no border to measure, so the front will not limit the ceiling.</p>
             <Button className="mt-3" variant="secondary" onClick={() => setTab("back")}>
               Measure the back
             </Button>
-          </div>
+          </Surface>
         ) : (
           <FacePanel
             face={tab}
@@ -274,11 +278,11 @@ export function CenteringTool() {
           />
         )}
         {tab === "front" && (
-          <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-line bg-surface px-3 text-sm">
+          <label className="ui-motion flex min-h-11 cursor-pointer items-center gap-3 rounded-ui-lg bg-surface px-4 py-2 text-sm elev-0 hover:bg-surface-2/70">
             <input type="checkbox" checked={frontSkipped} onChange={(e) => toggleSkip(e.target.checked)} className="h-5 w-5 accent-[var(--color-accent)]" />
             <span>
               <span className="font-medium">Full-art card (no border to measure)</span>
-              <span className="block text-xs text-muted">Skips the front. Front centering is not measured.</span>
+              <span className="block text-[13px] text-muted">Skips the front. Front centering is not measured.</span>
             </span>
           </label>
         )}
@@ -330,22 +334,27 @@ function FacePanel({
 
   if (state.status === "empty" || state.status === "error") {
     return (
-      <div className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-4">
+      <Surface padded="lg" className="flex flex-col gap-4">
         {state.status === "error" && (
-          <p role="alert" className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-sm text-danger">
+          <p role="alert" className="rounded-ui-md bg-danger/10 p-3 text-sm text-danger">
             {state.error} Try another photo.
           </p>
         )}
         <div>
-          <h2 className="text-lg font-bold capitalize">{face} photo</h2>
-          <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-sm text-muted">
+          <SectionHeader title={`${face === "front" ? "Front" : "Back"} photo`} subtitle="A few tips for an accurate reading" className="mb-2" />
+          <ul className="flex flex-col gap-2 text-[13px] text-muted">
             {TIPS.map((t) => (
-              <li key={t}>{t}</li>
+              <li key={t} className="flex items-start gap-2.5">
+                <svg viewBox="0 0 24 24" width="16" height="16" className="mt-px shrink-0 text-good" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 12.5l4.5 4.5L19 7.5" />
+                </svg>
+                <span>{t}</span>
+              </li>
             ))}
           </ul>
         </div>
         <CaptureButtons face={face} onFile={onFile} />
-      </div>
+      </Surface>
     );
   }
 
@@ -353,10 +362,10 @@ function FacePanel({
     const d = bufs.decoded;
     const rotate = () => onQuad([state.quad![1], state.quad![2], state.quad![3], state.quad![0]]);
     return (
-      <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-3 md:p-4">
-        <h2 className="text-lg font-bold">Check the corners</h2>
+      <Surface padded className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold tracking-tight">Check the corners</h2>
         {state.note ? (
-          <p role="alert" className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-sm">
+          <p role="alert" className="rounded-ui-md bg-danger/10 p-3 text-sm">
             {state.note}
           </p>
         ) : (
@@ -368,7 +377,7 @@ function FacePanel({
             Move the corners onto the card to continue.
           </p>
         )}
-        <p className="text-xs text-muted">Arrow keys nudge a focused corner by 1 pixel (Shift: 10).</p>
+        <p className="text-[13px] text-muted">Arrow keys nudge a focused corner by 1 pixel (Shift: 10).</p>
         <div className="flex flex-wrap gap-2">
           <Button onClick={onMeasure} disabled={!state.placed} aria-describedby={state.placed ? undefined : `${face}-place-hint`}>
             Measure
@@ -386,14 +395,14 @@ function FacePanel({
           )}
         </div>
         <CaptureButtons face={face} onFile={onFile} retake />
-      </div>
+      </Surface>
     );
   }
 
   if (state.status === "measured" && state.fit && state.origFit && bufs.warp) {
     return (
-      <div className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-3 md:p-4">
-        <h2 className="text-lg font-bold capitalize">{face} centering</h2>
+      <Surface padded className="flex flex-col gap-4">
+        <h2 className="text-lg font-semibold capitalize tracking-tight">{face} centering</h2>
         <Readout result={result} fit={state.fit} onCheck={onCheck} />
         <ResultEditor image={bufs.warp} fit={state.fit} origFit={state.origFit} onChange={onFit} warn={warn} focus={focusSide} />
         <div className="flex flex-wrap gap-2">
@@ -407,7 +416,7 @@ function FacePanel({
           )}
         </div>
         <CaptureButtons face={face} onFile={onFile} retake />
-      </div>
+      </Surface>
     );
   }
   return null;
