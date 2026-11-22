@@ -1,5 +1,6 @@
-// Pure helpers for searching Japanese cards by English species name (TCGdex has only
-// Japanese names for ja cards, but every Pokémon card carries `dexId`).
+// Pure helpers for searching Japanese cards by English species name. TCGdex has only Japanese names for ja
+// cards, and many newer ja cards have no `dexId`, so an English query is translated both to Pokédex numbers
+// and to Japanese species names (./pokedex-ja.ts).
 import { POKEDEX_EN } from "./pokedex-en";
 
 /** Max species fetched for one English query. */
@@ -54,4 +55,28 @@ export function matchSpecies(
     else if (k.includes(q)) substring.push(i + 1);
   });
   return [...exact, ...prefix, ...substring].slice(0, limit);
+}
+
+/** Card mechanics written in Latin letters on Japanese cards too ("エーフィex", "リザードンVMAX"). */
+const SUFFIXES = ["vstar", "vmax", "break", "gx", "ex", "v"] as const;
+export type CardSuffix = (typeof SUFFIXES)[number];
+
+/**
+ * Splits a trailing card-mechanic word off an English query: "Espeon ex" → { base: "Espeon", suffix: "ex" },
+ * "charizard vmax" → { base: "charizard", suffix: "vmax" }. A query that is only a suffix is left alone.
+ */
+export function splitSuffix(query: string): { base: string; suffix?: CardSuffix } {
+  const m = /^(.*\S)\s+([A-Za-z]+)$/.exec(query.trim());
+  const word = m?.[2].toLowerCase();
+  if (m && word && (SUFFIXES as readonly string[]).includes(word)) return { base: m[1], suffix: word as CardSuffix };
+  return { base: query.trim() };
+}
+
+/** True when a Japanese card name ends with the mechanic ("エーフィex" has "ex"; "リザードンVMAX" has "vmax"). */
+export function nameHasSuffix(name: string, suffix: CardSuffix): boolean {
+  const n = name.normalize("NFKC").replace(/[\s　]+$/, "").toLowerCase();
+  if (!n.endsWith(suffix)) return false;
+  // "v" must not match the end of "vmax"/"vstar" names or a trailing Latin word; "ex" also covers old "EX".
+  const before = n.slice(0, n.length - suffix.length);
+  return before === "" || !/[a-z]$/.test(before);
 }

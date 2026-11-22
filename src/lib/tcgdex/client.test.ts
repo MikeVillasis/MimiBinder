@@ -252,8 +252,11 @@ describe("tcgdex client: Japanese", () => {
     const dexCalls = fn.mock.calls
       .map(([u, init]) => ({ url: new URL(String(u)), init }))
       .filter(({ url }) => url.pathname === "/v2/ja/cards");
-    expect(dexCalls.map((c) => c.url.searchParams.get("dexId"))).toEqual(["eq:25"]);
-    expect(dexCalls[0].init).toMatchObject({ next: { revalidate: 43200 } });
+    const byDex = dexCalls.filter((c) => c.url.searchParams.has("dexId"));
+    expect(byDex.map((c) => c.url.searchParams.get("dexId"))).toEqual(["eq:25"]);
+    expect(byDex[0].init).toMatchObject({ next: { revalidate: 43200 } });
+    // Also searched by Japanese name, for cards TCGdex has without a dexId.
+    expect(dexCalls.map((c) => c.url.searchParams.get("name")).filter(Boolean)).toContain("ピカチュウ");
     // M2 (newest), SV2a, SV1V, then SV-P (not in the release order)
     expect(res.cards.map((c) => c.id)).toEqual([
       "ja:M2-030",
@@ -394,6 +397,25 @@ describe("searchCards: card numbers", () => {
     expect(call.searchParams.get("localId")).toBe("TG");
     expect(call.searchParams.get("name")).toBe("pikachu");
     expect(res.cards.map((c) => c.id)).toEqual(["swsh9tg-TG05", "swsh11tg-TG05"]);
+  });
+
+  it("ja + English name finds cards without a dexId by their Japanese name, with ex and number", async () => {
+    // SV8a-211 エーフィex has no dexId in TCGdex, so only the name search can find it.
+    const espeonByName = [
+      { id: "SV8a-211", localId: "211", name: "エーフィex", image: "https://assets.tcgdex.net/ja/SV/SV8a/211" },
+      { id: "SV8a-062", localId: "062", name: "エーフィex" },
+      { id: "SM11b-030", localId: "030", name: "エーフィ" },
+    ];
+    mockFetch(
+      tcgdexRoutes((url) =>
+        url.pathname === "/v2/ja/cards" && url.searchParams.get("name") === "エーフィ" ? espeonByName : url.pathname === "/v2/ja/cards" ? [] : undefined,
+      ),
+    );
+    expect((await searchCards("Espeon ex 211", 1, "ja")).cards.map((c) => c.id)).toEqual(["ja:SV8a-211"]);
+    const exOnly = (await searchCards("espeon ex", 1, "ja")).cards.map((c) => c.id);
+    expect(exOnly).toContain("ja:SV8a-211");
+    expect(exOnly).not.toContain("ja:SM11b-030");
+    expect((await searchCards("espeon", 1, "ja")).cards.map((c) => c.id)).toContain("ja:SM11b-030");
   });
 
   it("ja + English name + number filters the species results", async () => {

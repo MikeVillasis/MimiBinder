@@ -21,7 +21,8 @@ import {
   setIdFromCardId,
   type SerieIndex,
 } from "./normalize";
-import { hasJapanese, matchSpecies } from "./species";
+import { hasJapanese, matchSpecies, nameHasSuffix, splitSuffix } from "./species";
+import { POKEDEX_JA } from "./pokedex-ja";
 import { matchesCardNumber, parseCardQuery, type CardNumberQuery } from "../search-query";
 
 export const TCGDEX_BASES: Record<Lang, string> = {
@@ -356,34 +357,40 @@ async function searchByNumber(
 }
 
 /**
- * Japanese cards for up to 6 English species matches: one fetch-cached `/ja/cards?dexId=eq:N`
- * per species (all cards, unpaginated; ~100 for the most printed species), merged and
- * deduplicated, sorted newest set first (by the serie index's release order; cards of unknown
- * sets last, TCGdex order kept within a set), then paginated locally at 24 per page.
- * With `number`, only cards with exactly that number are kept (and a "/total" ranks matching
- * sets first).
+ * Japanese cards for an English query ("espeon", "Espeon ex", "char"): up to 6 species are matched
+ * (./species.ts), and for each, two fetch-cached lists are merged:
+ * - `/ja/cards?dexId=eq:N` (all cards with that Pokédex number), and
+ * - TCGdex's Japanese name search for each Japanese spelling in POKEDEX_JA ("エーフィ", "エスペオン"),
+ *   because many newer Japanese cards have no `dexId` (e.g. SV8a-211 エーフィex).
+ * A trailing mechanic ("ex", "V", "VMAX", "VSTAR", "GX", "BREAK") keeps only cards whose Japanese name
+ * ends with it. Results are deduplicated, sorted newest set first and paginated locally at 24 per page.
+ * With `number`, only cards with exactly that number are kept (a "/total" ranks matching sets first).
  */
 async function searchJapaneseBySpecies(
   query: string,
   page: number,
   number?: CardNumberQuery,
 ): Promise<SearchResult> {
-  const dex = matchSpecies(query);
+  const { base, suffix } = splitSuffix(query);
+  const dex = matchSpecies(base);
   if (dex.length === 0) return { cards: [], page, hasMore: false };
-  const [lists, idx] = await Promise.all([
-    Promise.all(
-      dex.map((n) =>
-        getJson<RawCardBrief[]>(`/cards?dexId=eq:${n}`, REVALIDATE.search, undefined, "ja"),
-      ),
-    ),
-    getSerieIndex("ja").catch(() => null),
-  ]);
+  const byName = (jaName: string) => {
+    const params = new URLSearchParams({ name: jaName, "pagination:itemsPerPage": String(NUMBER_SEARCH_PAGE_SIZE) });
+    return getJson<RawCardBrief[]>(`/cards?${params}`, REVALIDATE.search, undefined, "ja").catch(() => []);
+  };
+  const requests: Promise<RawCardBrief[]>[] = [];
+  for (const n of dex) {
+    requests.push(getJson<RawCardBrief[]>(`/cards?dexId=eq:${n}`, REVALIDATE.search, undefined, "ja").catch(() => []));
+    for (const jaName of POKEDEX_JA[n - 1] ?? []) requests.push(byName(jaName));
+  }
+  const [lists, idx] = await Promise.all([Promise.all(requests), getSerieIndex("ja").catch(() => null)]);
   const excluded = idx?.excluded ?? new Set<string>();
   const seen = new Set<string>();
   const merged: CardSummary[] = [];
   for (const list of lists) {
     for (const raw of Array.isArray(list) ? list : []) {
       if (!raw?.id || isExcludedCard(raw, excluded, "ja")) continue;
+      if (suffix && !nameHasSuffix(raw.name ?? "", suffix)) continue;
       if (number && (typeof raw.localId !== "string" || !matchesCardNumber(raw.localId, number))) continue;
       const card = normalizeCardSummary(raw, "ja");
       if (seen.has(card.id)) continue;

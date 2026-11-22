@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { POKEDEX_EN } from "./pokedex-en";
-import { hasJapanese, matchSpecies, MAX_SPECIES, speciesKey } from "./species";
+import { hasJapanese, matchSpecies, MAX_SPECIES, speciesKey, nameHasSuffix, splitSuffix } from "./species";
+import { POKEDEX_JA } from "./pokedex-ja";
 
 const names = ["Charmander", "Charmeleon", "Charizard", "Pikachu", "Raichu", "Flabébé", "Mr. Mime", "Char"];
 
@@ -55,5 +56,36 @@ describe("hasJapanese", () => {
     expect(hasJapanese("ﾋﾟｶﾁｭｳ")).toBe(true);
     expect(hasJapanese("pikachu")).toBe(false);
     expect(hasJapanese("Flabébé")).toBe(false);
+  });
+});
+
+describe("card mechanic suffixes", () => {
+  it("splits a trailing mechanic word off English queries", () => {
+    expect(splitSuffix("Espeon ex")).toEqual({ base: "Espeon", suffix: "ex" });
+    expect(splitSuffix("charizard VMAX")).toEqual({ base: "charizard", suffix: "vmax" });
+    expect(splitSuffix("Zacian V")).toEqual({ base: "Zacian", suffix: "v" });
+    expect(splitSuffix("espeon")).toEqual({ base: "espeon" });
+    expect(splitSuffix("ex")).toEqual({ base: "ex" });
+    expect(splitSuffix("Mr. Mime")).toEqual({ base: "Mr. Mime" });
+  });
+
+  it("matches the mechanic at the end of Japanese names", () => {
+    expect(nameHasSuffix("エーフィex", "ex")).toBe(true);
+    expect(nameHasSuffix("エーフィEX", "ex")).toBe(true);
+    expect(nameHasSuffix("エーフィ", "ex")).toBe(false);
+    expect(nameHasSuffix("リザードンVMAX", "vmax")).toBe(true);
+    expect(nameHasSuffix("リザードンVMAX", "v")).toBe(false);
+    expect(nameHasSuffix("ザシアンV", "v")).toBe(true);
+    expect(nameHasSuffix("ザシアンＶ", "v")).toBe(true); // full-width V
+  });
+});
+
+describe("Japanese name table", () => {
+  it("translates species to Japanese", () => {
+    expect(POKEDEX_JA).toHaveLength(1025);
+    expect(POKEDEX_JA.every((n) => n.length > 0)).toBe(true);
+    expect(POKEDEX_JA[195][0]).toBe("エーフィ"); // Espeon
+    expect(POKEDEX_JA[24][0]).toBe("ピカチュウ"); // Pikachu
+    expect(POKEDEX_JA[1016][0]).toBe("オーガポン"); // Ogerpon
   });
 });
