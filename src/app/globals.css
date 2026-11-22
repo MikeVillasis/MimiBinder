@@ -48,6 +48,26 @@
   --card-shadow: 0 10px 24px -12px rgb(60 48 40 / 0.45);
 }
 
+/* "Star Requiem" — inspired by Giratina VSTAR (Crown Zenith GG69/GG70), illustrated by
+   Akira Egawa. Umber darkness, cream text, gold accent and a deep crimson brand colour. */
+:root[data-theme="giratina"] {
+  color-scheme: dark;
+  --color-bg: #140b06;
+  --color-surface: rgb(36 22 13 / 0.84);
+  --color-surface-2: rgb(52 33 20 / 0.88);
+  --color-line: #4a3221;
+  --color-fg: #f4ecdc;
+  --color-muted: #c4ad8a;
+  --color-accent: #e5b549;
+  --color-accent-fg: #1e1206;
+  --color-brand: #a8343f;
+  --color-good: #5cc590;
+  --color-danger: #f59a92;
+  --glow-1: rgb(229 181 73 / 0.07);
+  --glow-2: rgb(168 52 63 / 0.06);
+  --card-shadow: 0 10px 26px -10px rgb(0 0 0 / 0.75);
+}
+
 html {
   background: var(--color-bg);
   -webkit-tap-highlight-color: transparent;

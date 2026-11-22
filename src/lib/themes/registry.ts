@@ -46,6 +46,16 @@ export const THEMES: ThemeMeta[] = [
     shader: true,
     credit: { card: "Origin Forme Palkia V", set: "Astral Radiance", number: "167/189", artist: "Oswaldo KATO" },
   },
+  {
+    id: "giratina",
+    name: "Star Requiem",
+    mode: "dark",
+    description: "Umber darkness with marbled gold flow lines, gold-leaf flecks and a touch of crimson.",
+    themeColor: "#140b06",
+    swatches: ["#140b06", "#24160d", "#e5b549", "#a8343f", "#8b6237"],
+    shader: true,
+    credit: { card: "Giratina VSTAR", set: "Crown Zenith", number: "GG69/GG70", artist: "Akira Egawa" },
+  },
 ];
 
 export const DEFAULT_THEME = "default";
