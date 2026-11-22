@@ -251,7 +251,7 @@ describe("sync access", () => {
       ],
       [binder],
     );
-    expect(res).toEqual({ entries: 1, binders: 1 });
+    expect(res).toEqual({ entries: 1, binders: 1, assessments: 0 });
     expect((await db.entries.get("r1"))!.quantity).toBe(1);
     expect((await db.entries.get("r3"))!.updatedAt).toBe("2026-01-03T00:00:00.000Z");
 

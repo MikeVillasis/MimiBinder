@@ -110,6 +110,27 @@ export function pullLowerBound(cursor: string | null, overlapMs: number): string
   return new Date(t - overlapMs).toISOString();
 }
 
+/** The bits of a Supabase/PostgREST error we look at. */
+export interface SupabaseErrorLike {
+  code?: string | null;
+  message?: string | null;
+  details?: string | null;
+  hint?: string | null;
+}
+
+/**
+ * True when a Supabase error means the table or RPC does not exist (yet), e.g. migration 0003 has not been run:
+ * PostgREST PGRST205 (table not in schema cache) / PGRST202 (function not in schema cache), Postgres 42P01
+ * (undefined table) / 42883 (undefined function). Anything else (network, auth, payload) is a real error.
+ */
+export function isMissingRelationError(error: SupabaseErrorLike | null | undefined): boolean {
+  if (!error) return false;
+  const code = error.code ?? "";
+  if (code === "PGRST205" || code === "PGRST202" || code === "42P01" || code === "42883") return true;
+  const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`;
+  return /could not find the (table|function)[\s\S]*schema cache/i.test(text) || /relation "[^"]+" does not exist/i.test(text);
+}
+
 /** Split into chunks of at most `size`. */
 export function chunk<T>(items: readonly T[], size: number): T[][] {
   const out: T[][] = [];

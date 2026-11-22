@@ -83,7 +83,7 @@ See `.env.example` for the full list with comments.
 ### Supabase setup
 
 1. Create a free project at supabase.com.
-2. SQL Editor → paste and run `supabase/migrations/0001_init.sql`.
+2. SQL Editor → paste and run `supabase/migrations/0001_init.sql`, then `0002_stamped_printings.sql` and `0003_grading_assessments.sql` (in order; each is safe to re-run).
 3. Authentication → Sign In / Providers: keep **Email** on and turn **off** "Allow new users to sign up".
 4. Authentication → Users → Add user → Create new user with your email, tick **Auto Confirm User** (the password is never used).
 5. Authentication → URL Configuration: Site URL `https://<your-domain>`; Redirect URLs `https://<your-domain>/auth/callback` and `http://localhost:3000/auth/callback`.

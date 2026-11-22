@@ -9,7 +9,7 @@ import type {
   Settings,
   Variant,
 } from "../types";
-import { assessmentSchema, type GradingAssessment } from "./assessments";
+import { assessmentSchema, tombstoneOf, type GradingAssessment } from "./assessments";
 import { db, DEFAULT_SETTINGS, nowIso, SETTINGS_KEY, type CachedCard } from "./database";
 
 // ---- Entries ------------------------------------------------------------------------
@@ -252,7 +252,7 @@ const exportSchema = z.object({
 export type CollectionExport = z.infer<typeof exportSchema>;
 
 /**
- * JSON backup of live (non-deleted) entries and binders plus settings and saved grading assessments.
+ * JSON backup of live (non-deleted) entries, binders and saved grading assessments, plus settings.
  * Still `version: 1`: `assessments` is an extra key that older app versions simply ignore.
  */
 export async function exportCollection(): Promise<string> {
@@ -260,7 +260,7 @@ export async function exportCollection(): Promise<string> {
     db.entries.filter((e) => !e.deletedAt).toArray(),
     db.binders.filter((b) => !b.deletedAt).toArray(),
     getSettings(),
-    db.assessments.toArray(),
+    db.assessments.filter((a) => !a.deletedAt).toArray(),
   ]);
   return JSON.stringify(
     { version: 1, exportedAt: new Date().toISOString(), entries, binders, settings, assessments },
@@ -282,9 +282,10 @@ export class ImportError extends Error {
  * - replace: every local row not in the file is tombstoned (so deletions sync); every
  *   imported row is written with a fresh updatedAt so it wins on the next sync. Settings
  *   from the file are applied.
- * - Saved grading assessments (local only) follow the same idea: merge keeps the newer row; replace makes the
- *   local set equal to the file's. A backup made before assessments existed has no `assessments` key and
- *   leaves the local ones untouched in both modes.
+ * - Saved grading assessments (synced like entries) follow the same rules: merge keeps the newer row; replace
+ *   tombstones every live local check not in the file and rewrites the file's checks with a fresh updatedAt.
+ *   A backup made before assessments existed has no `assessments` key and leaves the local ones untouched in
+ *   both modes.
  * Returns the number of entries / binders written, plus `assessments` when the file contained any.
  * Throws ImportError on invalid input.
  */
@@ -314,10 +315,8 @@ export async function importCollection(
     return db.transaction("rw", db.entries, db.binders, db.assessments, async () => {
       const done = await applyLww(entries, binders);
       if (!assessments?.length) return done;
-      const local = await db.assessments.bulkGet(assessments.map((a) => a.id));
-      const write = assessments.filter((a, i) => !local[i] || a.updatedAt > local[i]!.updatedAt);
-      await db.assessments.bulkPut(write);
-      return { ...done, assessments: write.length };
+      const written = await applyAssessmentsLww(assessments);
+      return { ...done, assessments: written };
     });
   }
 
@@ -344,8 +343,12 @@ export async function importCollection(
       await db.settings.put({ key: SETTINGS_KEY, ...current, ...stripUndefined(data.settings) });
     }
     if (assessments) {
-      await db.assessments.clear();
-      await db.assessments.bulkPut(assessments);
+      const keep = new Set(assessments.map((a) => a.id));
+      const stale = await db.assessments.filter((a) => !keep.has(a.id) && !a.deletedAt).toArray();
+      await db.assessments.bulkPut([
+        ...stale.map((a) => tombstoneOf(a, now)),
+        ...assessments.map((a) => ({ ...a, updatedAt: nowIso() })),
+      ]);
     }
     return { entries: entries.length, binders: binders.length, ...(assessments?.length ? { assessments: assessments.length } : {}) };
   });
@@ -353,15 +356,20 @@ export async function importCollection(
 
 // ---- Raw access for the sync engine ---------------------------------------------------
 
-/** Rows (including tombstones) with updatedAt strictly after `iso`. */
+/**
+ * Rows (including tombstones) with updatedAt strictly after `iso`. Assessments use their own cursor
+ * (`assessmentsIso`, default `iso`) so they can be held back while the remote table does not exist yet.
+ */
 export async function getChangedSince(
   iso: string,
-): Promise<{ entries: CollectionEntry[]; binders: Binder[] }> {
-  const [entries, binders] = await Promise.all([
+  assessmentsIso: string = iso,
+): Promise<{ entries: CollectionEntry[]; binders: Binder[]; assessments: GradingAssessment[] }> {
+  const [entries, binders, assessments] = await Promise.all([
     db.entries.where("updatedAt").above(canonicalIso(iso)).toArray(),
     db.binders.where("updatedAt").above(canonicalIso(iso)).toArray(),
+    db.assessments.where("updatedAt").above(canonicalIso(assessmentsIso)).toArray(),
   ]);
-  return { entries, binders };
+  return { entries, binders, assessments };
 }
 
 /** Canonical ISO form so string comparison (and the updatedAt index) orders correctly. */
@@ -379,6 +387,20 @@ function canonicalRow<T extends { createdAt: string; updatedAt: string; deletedA
     updatedAt: canonicalIso(row.updatedAt),
     ...(row.deletedAt ? { deletedAt: canonicalIso(row.deletedAt) } : {}),
   };
+}
+
+/** Deduplicate incoming rows by id (newest wins), then write those strictly newer than the local copy. */
+async function applyAssessmentsLww(incoming: GradingAssessment[]): Promise<number> {
+  const m = new Map<string, GradingAssessment>();
+  for (const r of incoming.map(canonicalRow)) {
+    const cur = m.get(r.id);
+    if (!cur || r.updatedAt > cur.updatedAt) m.set(r.id, r);
+  }
+  const rows = [...m.values()];
+  const local = await db.assessments.bulkGet(rows.map((a) => a.id));
+  const write = rows.filter((a, i) => !local[i] || a.updatedAt > canonicalIso(local[i]!.updatedAt));
+  await db.assessments.bulkPut(write);
+  return write.length;
 }
 
 async function applyLww(
@@ -417,11 +439,14 @@ async function applyLww(
 export async function applyRemote(
   entries: CollectionEntry[],
   binders: Binder[],
-): Promise<{ entries: number; binders: number }> {
-  return db.transaction("rw", db.entries, db.binders, () =>
-    applyLww(
+  assessments: GradingAssessment[] = [],
+): Promise<{ entries: number; binders: number; assessments: number }> {
+  return db.transaction("rw", db.entries, db.binders, db.assessments, async () => {
+    const done = await applyLww(
       entries.map((e) => ({ ...e, binderIds: e.binderIds ?? [] })),
       binders,
-    ),
-  );
+    );
+    const written = assessments.length ? await applyAssessmentsLww(assessments) : 0;
+    return { ...done, assessments: written };
+  });
 }

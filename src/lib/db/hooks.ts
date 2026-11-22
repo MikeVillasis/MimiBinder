@@ -29,10 +29,11 @@ export function useBinders(): Binder[] | undefined {
   }, []);
 }
 
-/** Saved grading assessments, newest first; all of them, or only one card's. `undefined` while loading. */
+/** Live (non-deleted) grading assessments, newest first; all of them, or only one card's. `undefined` while loading. */
 export function useAssessments(cardId?: string): GradingAssessment[] | undefined {
   return useLiveQuery(async () => {
-    const rows = cardId ? await db.assessments.where("cardId").equals(cardId).toArray() : await db.assessments.toArray();
+    const all = cardId ? await db.assessments.where("cardId").equals(cardId).toArray() : await db.assessments.toArray();
+    const rows = all.filter((a) => !a.deletedAt);
     return rows.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
   }, [cardId]);
 }

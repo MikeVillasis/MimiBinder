@@ -1,6 +1,7 @@
 // Saved grading assessments (the centering tool's results) and, later, the grade PSA actually returned.
-// Local only: they live in IndexedDB and in the JSON backup, and are NOT synced to Supabase (photos and notes
-// about a card's condition stay on this device). See docs/proposals/GRADING_V2.md.
+// They live in IndexedDB and in the JSON backup and, when the owner is signed in, sync to Supabase like entries
+// and binders (last-write-wins on updatedAt, deletions as tombstones). Small thumbnails travel inside the row;
+// the sync engine shrinks a row that would be too big (assessment-size.ts). See docs/proposals/GRADING_V2.md.
 import { z } from "zod";
 import { db, nowIso } from "./database";
 
@@ -61,6 +62,8 @@ export interface GradingAssessment {
   entryId?: string;
   createdAt: string;
   updatedAt: string;
+  /** Tombstone: set when the check is deleted, so the deletion syncs. Hidden from every list. */
+  deletedAt?: string;
   front?: SavedFace;
   back?: SavedFace;
   /** The front was skipped because the card is full art. */
@@ -126,6 +129,7 @@ export const assessmentSchema = z.object({
   entryId: optStr,
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
+  deletedAt: optStr,
   front: faceSchema.nullish().transform((v) => v ?? undefined),
   back: faceSchema.nullish().transform((v) => v ?? undefined),
   frontFullArt: z.boolean().nullish().transform((v) => v ?? undefined),
@@ -146,6 +150,12 @@ function strip<T extends object>(o: T): T {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
 }
 
+/** Validate a row from elsewhere (a pulled Supabase row): the clean record, or null when malformed. */
+export function parseAssessment(raw: unknown): GradingAssessment | null {
+  const r = assessmentSchema.safeParse(raw);
+  return r.success ? (strip(r.data) as GradingAssessment) : null;
+}
+
 export type NewAssessment = Omit<GradingAssessment, "id" | "createdAt" | "updatedAt" | "engine">;
 
 export async function saveAssessment(input: NewAssessment): Promise<GradingAssessment> {
@@ -158,7 +168,7 @@ export async function saveAssessment(input: NewAssessment): Promise<GradingAsses
 export async function updateAssessment(id: string, patch: Partial<Pick<GradingAssessment, "cardName" | "entryId" | "notes">>): Promise<void> {
   await db.transaction("rw", db.assessments, async () => {
     const cur = await db.assessments.get(id);
-    if (!cur) throw new Error(`Assessment ${id} not found`);
+    if (!cur || cur.deletedAt) throw new Error(`Assessment ${id} not found`);
     await db.assessments.put(strip({ ...cur, ...patch, id, updatedAt: nowIso() }));
   });
 }
@@ -168,7 +178,7 @@ export async function recordActualGrade(id: string, actual: ActualGrade | null):
   if (actual && !isPsaGrade(actual.grade)) throw new Error("Not a PSA grade");
   await db.transaction("rw", db.assessments, async () => {
     const cur = await db.assessments.get(id);
-    if (!cur) throw new Error(`Assessment ${id} not found`);
+    if (!cur || cur.deletedAt) throw new Error(`Assessment ${id} not found`);
     const next: GradingAssessment = { ...cur, updatedAt: nowIso() };
     if (actual) next.actual = strip({ ...actual, qualifier: actual.qualifier || undefined, gradedAt: actual.gradedAt || undefined, cert: actual.cert?.trim() || undefined });
     else delete next.actual;
@@ -176,9 +186,22 @@ export async function recordActualGrade(id: string, actual: ActualGrade | null):
   });
 }
 
-/** Hard delete: assessments are local only, so there is nothing to tombstone. */
+/**
+ * Soft-delete (tombstone) so the deletion syncs. The tombstone keeps only what sync and the indexes need: the
+ * photos, notes and returned grade are dropped right away, on this device and (after the next sync) remotely.
+ */
 export async function deleteAssessment(id: string): Promise<void> {
-  await db.assessments.delete(id);
+  await db.transaction("rw", db.assessments, async () => {
+    const cur = await db.assessments.get(id);
+    if (!cur || cur.deletedAt) return;
+    const now = nowIso();
+    await db.assessments.put(tombstoneOf(cur, now));
+  });
+}
+
+/** The minimal row left behind when a check is deleted. */
+export function tombstoneOf(row: GradingAssessment, at: string): GradingAssessment {
+  return strip({ id: row.id, cardId: row.cardId, entryId: row.entryId, createdAt: row.createdAt, updatedAt: at, deletedAt: at, engine: row.engine });
 }
 
 export interface AccuracySummary {
