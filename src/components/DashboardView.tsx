@@ -10,7 +10,7 @@ import { useCollectionPrices } from "@/lib/useCollectionPrices";
 import { printingLabel } from "@/lib/stamps";
 import { CardImage } from "./CardImage";
 import { cardHref, entryCost, entryValue, useAsync, useMoney } from "./hooks";
-import { EmptyState, LangBadge, PageHeader, ProgressBar, SetLogo, Skeleton, Stat } from "./ui";
+import { EmptyState, LangBadge, ListGroup, ListRow, PageHeader, SectionHeader, SetLogo, Skeleton, Stat, Surface, buttonCls, cx } from "./ui";
 
 export function DashboardView() {
   const entries = useEntries();
@@ -38,13 +38,14 @@ export function DashboardView() {
     return {
       value,
       cost,
+      hasCost: costed.length > 0,
       gain,
       pct: cost > 0 ? (gain / cost) * 100 : null,
       unpriced,
       copies: list.reduce((n, e) => n + e.quantity, 0),
       unique: new Set(list.map((e) => e.cardId)).size,
       top: [...rows].filter((r) => r.v != null).sort((a, b) => b.v! - a.v!).slice(0, 5),
-      recent: [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8),
+      recent: [...rows].sort((a, b) => b.e.createdAt.localeCompare(a.e.createdAt)).slice(0, 10),
     };
   }, [entries, cards, settings, fx]);
 
@@ -62,10 +63,13 @@ export function DashboardView() {
     return (
       <>
         <PageHeader title="Home" />
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-24" />
-          ))}
+        <div className="flex flex-col gap-6">
+          <Skeleton className="h-40 rounded-ui-lg" />
+          <div className="flex gap-3 overflow-hidden">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="aspect-[63/88] w-32 shrink-0 rounded-xl" />
+            ))}
+          </div>
         </div>
       </>
     );
@@ -74,9 +78,9 @@ export function DashboardView() {
   if (entries.length === 0) {
     return (
       <>
-        <PageHeader title="Welcome to MimiBinder" subtitle="Track your Pokemon TCG collection and what it is worth." />
+        <PageHeader title="Welcome to MimiBinder" subtitle="Track your Pokémon TCG collection and what it is worth." />
         <EmptyState title="Start your collection" body="Search for a card you own, add it, and your total value, gains and set progress show up here.">
-          <Link href="/search" className="inline-flex min-h-11 items-center rounded-xl bg-accent px-5 font-bold text-accent-fg">
+          <Link href="/search" className={buttonCls({ size: "lg" })}>
             Search for a card
           </Link>
         </EmptyState>
@@ -85,134 +89,228 @@ export function DashboardView() {
   }
 
   const priceReady = !loading || stats.value > 0;
-  const gainTone = stats.gain >= 0 ? "good" : "bad";
+  const sourceName = settings.priceSource === "tcgplayer" ? "TCGPlayer" : "Cardmarket";
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Home"
-        subtitle={`Prices in ${settings.currency} · ${settings.priceSource === "tcgplayer" ? "TCGPlayer" : "Cardmarket"}${hasJa ? " (Japanese cards: Cardmarket)" : ""}`}
-      />
+    <div>
+      <PageHeader title="Home" />
+      <div className="flex flex-col gap-8">
 
-      <section aria-label="Summary" className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <div className="col-span-2 rounded-2xl border border-accent/30 p-4" style={{ background: "linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 14%, transparent), color-mix(in srgb, var(--color-brand) 8%, transparent))" }}>
-          <div className="text-xs font-medium uppercase tracking-wide text-muted">Total value</div>
-          {priceReady ? (
-            <div className="mt-1 text-4xl font-extrabold tabular-nums text-accent">{fmtDisplay(stats.value)}</div>
-          ) : (
-            <Skeleton className="mt-2 h-10 w-40" />
-          )}
-          {stats.unpriced > 0 && priceReady && <div className="mt-1 text-xs text-muted">{stats.unpriced} entries without a price yet</div>}
-        </div>
-        <Stat label="Cost basis" value={fmtDisplay(stats.cost)} />
-        <Stat
-          label="Gain / loss"
-          tone={stats.cost > 0 ? gainTone : undefined}
-          value={stats.cost > 0 ? `${stats.gain >= 0 ? "+" : ""}${fmtDisplay(stats.gain)}` : "—"}
-          sub={stats.pct != null ? `${stats.pct >= 0 ? "+" : ""}${stats.pct.toFixed(1)}%` : "Add purchase prices to track"}
-        />
-        <Stat label="Cards" value={stats.copies} sub="total copies" />
-        <Stat label="Unique" value={stats.unique} sub="different cards" />
-      </section>
-
-      <Link href="/centering" className="flex min-h-11 items-center gap-3 rounded-2xl border border-line bg-surface p-3 hover:border-accent/50">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="4" y="4" width="16" height="16" rx="1" />
-            <rect x="8" y="7" width="8" height="10" />
-          </svg>
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-bold">Centering check</span>
-          <span className="block text-xs text-muted">Measure a card from phone photos, on your device.</span>
-        </span>
-        <span className="text-muted" aria-hidden="true">→</span>
-      </Link>
-
-      <section aria-labelledby="top-h">
-        <h2 id="top-h" className="mb-3 text-lg font-bold">
-          Most valuable
-        </h2>
-        {stats.top.length === 0 ? (
-          <p className="text-sm text-muted">{loading ? "Loading prices…" : "No priced cards yet."}</p>
-        ) : (
-          <ol className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            {stats.top.map(({ e, v }, i) => (
-              <li key={e.id}>
-                <Link href={cardHref(e.cardId)} className="flex min-h-11 items-center gap-3 rounded-2xl border border-line bg-surface p-2.5 hover:border-accent/50">
-                  <span className="w-5 text-center text-sm font-extrabold text-muted">{i + 1}</span>
-                  <div className="w-12 shrink-0">
-                    <CardImage image={e.image} name={e.cardName} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <span className="truncate text-sm font-bold">{e.cardName}</span>
-                      {langOf(e.cardId) === "ja" && <LangBadge className="shrink-0" />}
-                    </div>
-                    <div className="truncate text-xs text-muted">
-                      {e.setName} · {printingLabel(e.variant, e.stamp)} ×{e.quantity}
-                    </div>
-                  </div>
-                  <div className="text-sm font-bold tabular-nums text-accent">{fmtDisplay(v!)}</div>
-                </Link>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-
-      <section aria-labelledby="recent-h">
-        <h2 id="recent-h" className="mb-3 text-lg font-bold">
-          Recently added
-        </h2>
-        <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
-          {stats.recent.map((e) => (
-            <Link key={e.id} href={cardHref(e.cardId)} className="w-28 shrink-0 md:w-32" aria-label={e.cardName}>
-              <div className="relative">
-                <CardImage image={e.image} name={e.cardName} className="card-shadow" />
-                {langOf(e.cardId) === "ja" && <LangBadge className="absolute left-1.5 top-1.5" />}
-              </div>
-              <div className="mt-1 truncate text-xs font-semibold">{e.cardName}</div>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {completion.length > 0 && (
-        <section aria-labelledby="sets-h">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 id="sets-h" className="text-lg font-bold">
-              Set progress
-            </h2>
-            <Link href="/binders" className="inline-flex min-h-11 items-center text-sm font-medium text-accent">
-              All binders →
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {completion.map(({ set, c }) => (
-              <Link key={set.id} href={`/binders/set/${encodeURIComponent(set.id)}`} className="rounded-2xl border border-line bg-surface p-3 hover:border-accent/50">
-                <div className="flex items-center gap-3">
-                  <SetLogo name={set.name} logo={set.logo} symbol={set.symbol} fallbackText={langOf(set.id) === "ja" ? splitId(set.id).raw : undefined} className="h-9 w-12" />
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-2 flex items-center justify-between gap-2 text-sm">
-                      <span className="truncate font-semibold">{set.name}</span>
-                      <span className="shrink-0 tabular-nums text-muted">
-                        {c.owned}/{c.total} · {Math.round(c.percent)}%
-                      </span>
-                    </div>
-                    <ProgressBar percent={c.percent} label={`${set.name} completion`} />
-                    {c.secret > 0 && (
-                      <div className="mt-1.5 text-xs text-muted">
-                        <span className="font-semibold text-accent">+{c.secret}</span> secret rare{c.secret === 1 ? "" : "s"}
-                      </div>
-                    )}
-                  </div>
+        {/* Portfolio hero: the one number that matters, plus a quiet inline summary. */}
+        <Surface as="section" aria-label="Portfolio" padded="lg" className="relative overflow-hidden">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full opacity-60 blur-3xl"
+            style={{ background: "radial-gradient(circle, var(--color-accent-soft), transparent 70%)" }}
+          />
+          <div className="relative flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="min-w-0">
+              {priceReady ? (
+                <Stat inset size="lg" tone="accent" label="Total value" value={fmtDisplay(stats.value)} />
+              ) : (
+                <div>
+                  <div className="text-[13px] font-medium text-muted">Total value</div>
+                  <Skeleton className="mt-2 h-11 w-48" />
                 </div>
-              </Link>
-            ))}
+              )}
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+                {stats.hasCost && stats.cost > 0 && priceReady && <GainChip gain={stats.gain} pct={stats.pct} fmt={fmtDisplay} />}
+                <p className="text-sm text-muted tabular-nums">
+                  <span className="font-semibold text-fg">{stats.copies}</span> {stats.copies === 1 ? "card" : "cards"}
+                  <Dot />
+                  <span className="font-semibold text-fg">{stats.unique}</span> unique
+                  {stats.hasCost && stats.cost > 0 && (
+                    <>
+                      <Dot />
+                      cost <span className="font-semibold text-fg">{fmtDisplay(stats.cost)}</span>
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-0.5 border-t border-line/50 pt-3 text-[13px] text-muted md:items-end md:border-0 md:pt-0 md:text-right">
+              <span>
+                {settings.currency} · {sourceName}
+                {hasJa ? " (Japanese cards: Cardmarket)" : ""}
+                {stats.unpriced > 0 && priceReady && ` · ${stats.unpriced} without a price yet`}
+              </span>
+              {!stats.hasCost && (
+                <Link href="/collection" className="-mb-2 inline-flex min-h-9 items-center gap-1 font-medium text-fg/80 hover:text-accent md:justify-end">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M4 17l5-5 4 4 7-8" />
+                    <path d="M15 8h5v5" />
+                  </svg>
+                  Add purchase prices to track gains
+                </Link>
+              )}
+            </div>
           </div>
-        </section>
-      )}
+        </Surface>
+
+        {stats.recent.length > 0 && (
+          <section aria-labelledby="recent-h">
+            <SectionHeader id="recent-h" title="Recently added" href="/collection?sort=recent" />
+            <ul
+              role="list"
+              className="no-scrollbar -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-3 pt-1 md:-mx-1 md:scroll-px-1 md:gap-4 md:px-1"
+            >
+              {stats.recent.map(({ e, v }) => (
+                <li key={e.id} className="w-[7.5rem] shrink-0 snap-start md:w-36">
+                  <Link href={cardHref(e.cardId)} className="group block rounded-xl focus-visible:outline-offset-4" aria-label={e.cardName}>
+                    <div className="ui-motion ui-press ui-lift relative rounded-[6%/4.5%]">
+                      <CardImage image={e.image} name={e.cardName} className="card-shadow" />
+                      {langOf(e.cardId) === "ja" && <LangBadge className="absolute left-1.5 top-1.5" />}
+                    </div>
+                    <div className="mt-2 truncate px-0.5 text-[13px] font-semibold">{e.cardName}</div>
+                    <div className="truncate px-0.5 text-xs text-muted tabular-nums">
+                      {v != null ? fmtDisplay(v) : printingLabel(e.variant, e.stamp)}
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-6">
+          <ListGroup title="Most valuable" href="/collection?sort=value" label="Most valuable">
+            {stats.top.length === 0 ? (
+              <li className="px-4 py-5 text-sm text-muted">{loading ? "Loading prices…" : "No priced cards yet."}</li>
+            ) : (
+              stats.top.map(({ e, v }, i) => (
+                <ListRow
+                  key={e.id}
+                  href={cardHref(e.cardId)}
+                  chevron={false}
+                  leading={
+                    <span className="flex items-center gap-3">
+                      <span className="w-4 text-center text-[13px] font-semibold tabular-nums text-muted">{i + 1}</span>
+                      <span className="block w-10">
+                        <CardImage image={e.image} name={e.cardName} />
+                      </span>
+                    </span>
+                  }
+                  title={
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate">{e.cardName}</span>
+                      {langOf(e.cardId) === "ja" && <LangBadge className="shrink-0 shadow-none" />}
+                    </span>
+                  }
+                  subtitle={`${e.setName} · ${printingLabel(e.variant, e.stamp)}${e.quantity > 1 ? ` ×${e.quantity}` : ""}`}
+                  trailing={<span className="text-[15px] font-semibold">{fmtDisplay(v!)}</span>}
+                />
+              ))
+            )}
+          </ListGroup>
+
+          <div className="flex flex-col gap-8 lg:gap-6">
+            {completion.length > 0 && (
+              <ListGroup title="Set progress" href="/binders" actionLabel="All binders">
+                {completion.map(({ set, c }) => {
+                  const pct = Math.round(c.percent);
+                  return (
+                    <ListRow
+                      key={set.id}
+                      href={`/binders/set/${encodeURIComponent(set.id)}`}
+                      leading={
+                        <SetLogo
+                          name={set.name}
+                          logo={set.logo}
+                          symbol={set.symbol}
+                          fallbackText={langOf(set.id) === "ja" ? splitId(set.id).raw : undefined}
+                          className="h-9 w-12"
+                        />
+                      }
+                      title={set.name}
+                      subtitle={
+                        <span className="block">
+                          <span className="mt-1.5 flex items-center gap-2.5">
+                            <Bar percent={c.percent} label={`${set.name} completion`} />
+                            <span className="shrink-0 tabular-nums">
+                              {c.owned}/{c.total}
+                            </span>
+                          </span>
+                          {c.secret > 0 && (
+                            <span className="mt-1 block text-xs">
+                              <span className="font-semibold text-fg">+{c.secret}</span> secret rare{c.secret === 1 ? "" : "s"}
+                            </span>
+                          )}
+                        </span>
+                      }
+                      trailing={<span className={cx("font-semibold", pct >= 100 && "text-good")}>{pct}%</span>}
+                    />
+                  );
+                })}
+              </ListGroup>
+            )}
+
+            <ListGroup label="Tools">
+              <ListRow
+                href="/centering"
+                leading={
+                  <span className="flex h-9 w-9 items-center justify-center rounded-ui-sm bg-accent-soft text-accent" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="4" y="4" width="16" height="16" rx="1.5" />
+                      <rect x="8" y="7" width="8" height="10" rx="0.5" />
+                    </svg>
+                  </span>
+                }
+                title="Centering check"
+                subtitle="Measure a card from phone photos, on your device"
+              />
+            </ListGroup>
+          </div>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function Dot() {
+  return (
+    <span aria-hidden="true" className="mx-1.5 text-muted/60">
+      ·
+    </span>
+  );
+}
+
+/** Gain/loss pill: good/danger tint, arrow, amount and percent. */
+function GainChip({ gain, pct, fmt }: { gain: number; pct: number | null; fmt: (n: number) => string }) {
+  const up = gain >= 0;
+  return (
+    <span
+      className={cx(
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-semibold tabular-nums",
+        up ? "bg-good/12 text-good" : "bg-danger/12 text-danger",
+      )}
+    >
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {up ? <path d="M6 15l6-6 6 6" /> : <path d="M6 9l6 6 6-6" />}
+      </svg>
+      <span className="sr-only">{up ? "Gain" : "Loss"}</span>
+      {up ? "+" : "−"}
+      {fmt(Math.abs(gain))}
+      {pct != null && <span className="font-medium opacity-80">({up ? "+" : "−"}{Math.abs(pct).toFixed(1)}%)</span>}
+    </span>
+  );
+}
+
+/** Span-based progress bar (ProgressBar renders a div, which can't sit inside a ListRow's text spans). */
+function Bar({ percent, label }: { percent: number; label: string }) {
+  const p = Math.max(0, Math.min(100, percent));
+  return (
+    <span
+      role="progressbar"
+      aria-valuenow={Math.round(p)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={label}
+      className="block h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-3/80 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-line)_40%,transparent)]"
+    >
+      <span
+        className="block h-full rounded-full"
+        style={{ width: `${p}%`, minWidth: p > 0 ? 6 : 0, background: p >= 100 ? "var(--color-good)" : "var(--color-accent)" }}
+      />
+    </span>
   );
 }

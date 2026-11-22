@@ -6,8 +6,8 @@ import { useState } from "react";
 import { removeBinder, updateBinder, updateEntry, useBinders, useEntries } from "@/lib/db";
 import { printingLabel } from "@/lib/stamps";
 import { CardImage } from "./CardImage";
-import { cardHref } from "./hooks";
-import { Button, CardGridSkeleton, ConfirmDialog, EmptyState, Sheet, inputCls } from "./ui";
+import { CardTile, QtyBadge } from "./CardTile";
+import { Button, CardGridSkeleton, ConfirmDialog, EmptyState, Field, ListGroup, PageHeader, Sheet, buttonCls, cx, inputCls } from "./ui";
 
 export function CustomBinderView({ id }: { id: string }) {
   const router = useRouter();
@@ -24,7 +24,7 @@ export function CustomBinderView({ id }: { id: string }) {
   if (!binder)
     return (
       <EmptyState title="Binder not found" body="It may have been deleted.">
-        <Link href="/binders?tab=custom" className="inline-flex min-h-11 items-center rounded-xl bg-accent px-4 font-bold text-accent-fg">
+        <Link href="/binders?tab=custom" className={buttonCls()}>
           Back to binders
         </Link>
       </EmptyState>
@@ -32,58 +32,90 @@ export function CustomBinderView({ id }: { id: string }) {
 
   const inBinder = entries.filter((e) => e.binderIds.includes(id));
   const available = entries.filter((e) => !e.binderIds.includes(id) && e.cardName.toLowerCase().includes(filter.trim().toLowerCase()));
+  const copies = inBinder.reduce((n, e) => n + e.quantity, 0);
 
   return (
     <div>
-      <Link href="/binders?tab=custom" className="mb-2 inline-flex min-h-11 items-center text-sm text-muted hover:text-fg">
-        ← Binders
+      <Link href="/binders?tab=custom" className="-ml-2 mb-2 inline-flex min-h-11 items-center gap-1 rounded-ui-sm px-2 text-sm font-medium text-muted hover:text-fg">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M15 6l-6 6 6 6" />
+        </svg>
+        Binders
       </Link>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="truncate text-2xl font-extrabold tracking-tight md:text-3xl">{binder.name}</h1>
-          <p className="text-sm text-muted">
-            {inBinder.length} {inBinder.length === 1 ? "entry" : "entries"}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={() => setAdding(true)}>+ Add cards</Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setName(binder.name);
-              setRenaming(true);
-            }}
-          >
-            Rename
-          </Button>
-          <Button variant="danger" onClick={() => setConfirmDel(true)}>
-            Delete
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title={binder.name}
+        subtitle={
+          inBinder.length === 0
+            ? "Empty"
+            : `${inBinder.length} ${inBinder.length === 1 ? "entry" : "entries"} · ${copies} ${copies === 1 ? "card" : "cards"}`
+        }
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              aria-label="Rename binder"
+              onClick={() => {
+                setName(binder.name);
+                setRenaming(true);
+              }}
+              icon={
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+                </svg>
+              }
+            >
+              <span className="hidden sm:inline">Rename</span>
+            </Button>
+            <Button
+              variant="danger"
+              aria-label="Delete binder"
+              onClick={() => setConfirmDel(true)}
+              icon={
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                </svg>
+              }
+            >
+              <span className="hidden sm:inline">Delete</span>
+            </Button>
+            <Button onClick={() => setAdding(true)} icon={<PlusIcon />}>
+              Add cards
+            </Button>
+          </>
+        }
+      />
 
       {inBinder.length === 0 ? (
-        <EmptyState title="This binder is empty" body="Add cards from your collection." />
+        <EmptyState title="This binder is empty" body="Add cards from your collection.">
+          <Button variant="secondary" onClick={() => setAdding(true)} icon={<PlusIcon />}>
+            Add cards
+          </Button>
+        </EmptyState>
       ) : (
-        <div className="grid grid-cols-3 gap-x-2.5 gap-y-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 md:grid-cols-4 md:gap-x-4 lg:grid-cols-6">
           {inBinder.map((e) => (
-            <div key={e.id} className="min-w-0">
-              <Link href={cardHref(e.cardId)} aria-label={e.cardName}>
-                <CardImage image={e.image} name={e.cardName} className="card-shadow" />
-              </Link>
-              <div className="mt-1 truncate text-xs font-semibold">{e.cardName}</div>
-              <div className="truncate text-xs text-muted">
-                {printingLabel(e.variant, e.stamp)} · ×{e.quantity}
-              </div>
-              <button
-                type="button"
-                onClick={() => updateEntry(e.id, { binderIds: e.binderIds.filter((b) => b !== id) })}
-                className="mt-0.5 min-h-11 text-xs font-medium text-danger"
-                aria-label={`Remove ${e.cardName} from binder`}
-              >
-                Remove
-              </button>
-            </div>
+            <CardTile
+              key={e.id}
+              id={e.cardId}
+              name={e.cardName}
+              image={e.image}
+              badge={e.quantity > 1 ? <QtyBadge n={e.quantity} /> : undefined}
+              meta={printingLabel(e.variant, e.stamp)}
+              action={
+                <button
+                  type="button"
+                  onClick={() => updateEntry(e.id, { binderIds: e.binderIds.filter((b) => b !== id) })}
+                  aria-label={`Remove ${e.cardName} from binder`}
+                  title="Remove from binder"
+                  className="ui-motion flex h-11 w-9 items-center justify-center rounded-ui-sm text-muted/80 hover:bg-danger/12 hover:text-danger"
+                >
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                    <path d="M6 12h12" />
+                    <circle cx="12" cy="12" r="9" />
+                  </svg>
+                </button>
+              }
+            />
           ))}
         </div>
       )}
@@ -98,34 +130,44 @@ export function CustomBinderView({ id }: { id: string }) {
             setRenaming(false);
           }}
         >
-          <input aria-label="Binder name" className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoFocus />
-          <Button type="submit">Save</Button>
+          <Field label="Binder name">
+            <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoFocus />
+          </Field>
+          <Button type="submit" size="lg">
+            Save
+          </Button>
         </form>
       </Sheet>
 
       <Sheet open={adding} onClose={() => setAdding(false)} title="Add cards to binder">
-        <input aria-label="Filter your cards" placeholder="Filter by name…" className={`${inputCls} mb-3`} value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <div className="relative mb-3">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="M20 20l-4.2-4.2" />
+          </svg>
+          <input type="search" aria-label="Filter your cards" placeholder="Filter by name" className={cx(inputCls, "pl-10")} value={filter} onChange={(e) => setFilter(e.target.value)} />
+        </div>
         {available.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">No more cards to add.</p>
+          <p className="py-8 text-center text-sm text-muted">No more cards to add.</p>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ListGroup label="Cards you can add" className="[&>ul]:bg-surface-2/60 [&>ul]:shadow-none">
             {available.map((e) => (
-              <li key={e.id} className="flex items-center gap-3 rounded-xl border border-line bg-surface-2 p-2">
+              <li key={e.id} className="list-row flex items-center gap-3 px-4 py-2.5">
                 <div className="w-10 shrink-0">
                   <CardImage image={e.image} name={e.cardName} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">{e.cardName}</div>
-                  <div className="truncate text-xs text-muted">
+                  <div className="truncate text-[15px] font-semibold leading-snug">{e.cardName}</div>
+                  <div className="truncate text-[13px] text-muted">
                     {e.setName} · {printingLabel(e.variant, e.stamp)}
                   </div>
                 </div>
-                <Button size="sm" onClick={() => updateEntry(e.id, { binderIds: [...e.binderIds, id] })} aria-label={`Add ${e.cardName}`}>
+                <Button size="sm" variant="secondary" pill icon={<PlusIcon />} onClick={() => updateEntry(e.id, { binderIds: [...e.binderIds, id] })} aria-label={`Add ${e.cardName}`}>
                   Add
                 </Button>
               </li>
             ))}
-          </ul>
+          </ListGroup>
         )}
       </Sheet>
 
@@ -142,5 +184,13 @@ export function CustomBinderView({ id }: { id: string }) {
         }}
       />
     </div>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
   );
 }

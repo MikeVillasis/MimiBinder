@@ -5,10 +5,70 @@ import { printingKey, printingLabel } from "@/lib/stamps";
 import { langOf } from "@/lib/lang";
 import { effectiveSource } from "@/lib/pricing";
 import { useMoney } from "./hooks";
+import { Badge, SectionHeader, Surface, cx } from "./ui";
 
-function Cell({ v, cur }: { v: number | null | undefined; cur: "USD" | "EUR" }) {
+function Cell({ v, cur, strong }: { v: number | null | undefined; cur: "USD" | "EUR"; strong?: boolean }) {
   const { fmt } = useMoney();
-  return <td className="px-2 py-2.5 text-right tabular-nums">{v == null ? <span className="text-muted">—</span> : fmt(v, cur)}</td>;
+  return (
+    <td className={cx("py-3 pl-3 text-right tabular-nums", strong ? "font-semibold text-fg" : "text-fg/85")}>
+      {v == null ? <span className="text-muted/70">—</span> : fmt(v, cur)}
+    </td>
+  );
+}
+
+/** One source's block: name + "Selected" badge, source currency/date, and a light-ruled table. */
+function SourceBlock({
+  name,
+  selected,
+  meta,
+  cols,
+  rows,
+}: {
+  name: string;
+  selected: boolean;
+  meta: string;
+  cols: [string, string, string, string];
+  rows: { key: string; label: string; cells: [number | null | undefined, number | null | undefined, number | null | undefined]; cur: "USD" | "EUR" }[];
+}) {
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <div className="flex items-center gap-2">
+          <h3 className="text-[15px] font-semibold">{name}</h3>
+          {selected && <Badge tone="accent">Selected</Badge>}
+        </div>
+        <span className="text-xs text-muted">{meta}</span>
+      </div>
+      <div className="-mx-1 mt-1 overflow-x-auto px-1">
+        <table className="w-full min-w-[300px] text-sm">
+          <thead>
+            <tr className="text-xs text-muted">
+              <th scope="col" className="py-2 pr-3 text-left font-medium">
+                {cols[0]}
+              </th>
+              {cols.slice(1).map((c) => (
+                <th key={c} scope="col" className="py-2 pl-3 text-right font-medium">
+                  {c}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} className="border-t border-line/50">
+                <th scope="row" className="py-3 pr-3 text-left font-medium">
+                  {r.label}
+                </th>
+                <Cell v={r.cells[0]} cur={r.cur} />
+                <Cell v={r.cells[1]} cur={r.cur} />
+                <Cell v={r.cells[2]} cur={r.cur} strong={selected} />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 export function PriceTable({ card }: { card: CardDetail }) {
@@ -32,89 +92,49 @@ export function PriceTable({ card }: { card: CardDetail }) {
   const isJa = langOf(card.id) === "ja";
   const active = effectiveSource(card.id, settings.priceSource);
   const jaNote = isJa && (
-    <p className="text-xs text-muted">Japanese cards are priced from Cardmarket (EUR → {settings.currency}).</p>
+    <p className="rounded-ui-sm bg-surface-2 px-3 py-2 text-[13px] text-muted">Japanese cards are priced from Cardmarket (EUR → {settings.currency}).</p>
   );
 
   if (!hasTp && !hasCm) {
     return (
-      <section className="rounded-2xl border border-line bg-surface p-4">
-        <h2 className="mb-1 text-base font-bold">Prices</h2>
+      <Surface as="section" padded aria-labelledby="prices-h">
+        <SectionHeader id="prices-h" title="Prices" className="mb-1" />
         <p className="text-sm text-muted">No price data is available for this card.</p>
-        {jaNote && <div className="mt-1">{jaNote}</div>}
-      </section>
+        {jaNote && <div className="mt-3">{jaNote}</div>}
+      </Surface>
     );
   }
 
+  const blocks = [
+    hasTp && (
+      <SourceBlock
+        key="tp"
+        name="TCGPlayer"
+        selected={active === "tcgplayer"}
+        meta={`USD${tp ? ` · updated ${tp.updated.slice(0, 10)}` : ""}`}
+        cols={["Variant", "Low", "Mid", "Market"]}
+        rows={tpRows.map(([k, label, p]) => ({ key: k, label, cells: [p.low, p.mid, p.market], cur: "USD" as const }))}
+      />
+    ),
+    hasCm && (
+      <SourceBlock
+        key="cm"
+        name="Cardmarket"
+        selected={active === "cardmarket"}
+        meta={`EUR${cm ? ` · updated ${cm.updated.slice(0, 10)}` : ""}`}
+        cols={["Printing", "7d avg", "30d avg", "Trend"]}
+        rows={cmRows.map(({ label, p }) => ({ key: label, label, cells: [p.avg7, p.avg30, p.trend], cur: "EUR" as const }))}
+      />
+    ),
+  ].filter(Boolean);
+  // The selected source first.
+  if (active === "cardmarket") blocks.reverse();
+
   return (
-    <section className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-4" aria-labelledby="prices-h">
-      <h2 id="prices-h" className="text-base font-bold">
-        Prices <span className="text-xs font-normal text-muted">in {settings.currency}</span>
-      </h2>
-      {jaNote}
-      {hasTp && (
-        <div className={active === "tcgplayer" ? "" : "opacity-80"}>
-          <div className="mb-1 flex items-center justify-between text-xs text-muted">
-            <span className="font-semibold text-fg">TCGPlayer {active === "tcgplayer" && <span className="text-accent">· selected</span>}</span>
-            <span>source: USD{tp ? ` · updated ${tp.updated.slice(0, 10)}` : ""}</span>
-          </div>
-          <div className="-mx-1 overflow-x-auto">
-            <table className="w-full min-w-[300px] text-sm">
-              <thead className="text-xs text-muted">
-                <tr>
-                  <th className="px-2 py-1 text-left font-medium">Variant</th>
-                  <th className="px-2 py-1 text-right font-medium">Low</th>
-                  <th className="px-2 py-1 text-right font-medium">Mid</th>
-                  <th className="px-2 py-1 text-right font-medium">Market</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {tpRows.map(([k, label, p]) => (
-                  <tr key={k}>
-                    <th scope="row" className="px-2 py-2.5 text-left font-medium">
-                      {label}
-                    </th>
-                    <Cell v={p.low} cur="USD" />
-                    <Cell v={p.mid} cur="USD" />
-                    <Cell v={p.market} cur="USD" />
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-      {hasCm && (
-        <div className={active === "cardmarket" ? "" : "opacity-80"}>
-          <div className="mb-1 flex items-center justify-between text-xs text-muted">
-            <span className="font-semibold text-fg">Cardmarket {active === "cardmarket" && <span className="text-accent">· selected</span>}</span>
-            <span>source: EUR{cm ? ` · updated ${cm.updated.slice(0, 10)}` : ""}</span>
-          </div>
-          <div className="-mx-1 overflow-x-auto">
-            <table className="w-full min-w-[300px] text-sm">
-              <thead className="text-xs text-muted">
-                <tr>
-                  <th className="px-2 py-1 text-left font-medium">Printing</th>
-                  <th className="px-2 py-1 text-right font-medium">Trend</th>
-                  <th className="px-2 py-1 text-right font-medium">7d avg</th>
-                  <th className="px-2 py-1 text-right font-medium">30d avg</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {cmRows.map(({ label, p }) => (
-                  <tr key={label}>
-                    <th scope="row" className="px-2 py-2.5 text-left font-medium">
-                      {label}
-                    </th>
-                    <Cell v={p.trend} cur="EUR" />
-                    <Cell v={p.avg7} cur="EUR" />
-                    <Cell v={p.avg30} cur="EUR" />
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </section>
+    <Surface as="section" padded aria-labelledby="prices-h">
+      <SectionHeader id="prices-h" title="Prices" subtitle={`Converted to ${settings.currency}`} className="mb-2" />
+      {jaNote && <div className="mb-3">{jaNote}</div>}
+      <div className="flex flex-col gap-5">{blocks}</div>
+    </Surface>
   );
 }

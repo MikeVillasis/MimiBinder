@@ -297,7 +297,7 @@ type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 export function buttonCls({ variant = "primary", size = "md", pill = false }: Pick<BtnProps, "variant" | "size" | "pill"> = {}) {
   const v = {
     primary: "bg-accent text-accent-fg font-semibold shadow-[var(--hairline),var(--shadow-1)] hover:brightness-110",
-    secondary: "bg-surface-2 text-fg font-semibold hover:bg-surface-3",
+    secondary: "bg-surface-2 text-fg font-semibold elev-0 hover:bg-surface-3",
     ghost: "text-muted font-medium hover:bg-surface-2 hover:text-fg",
     danger: "bg-danger/12 text-danger font-semibold hover:bg-danger/20",
   }[variant];
@@ -448,7 +448,7 @@ export function Chip({
         "disabled:cursor-not-allowed disabled:opacity-50",
         selected
           ? "bg-accent-soft text-accent shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-accent)_30%,transparent)]"
-          : "bg-surface-2 text-muted hover:bg-surface-3 hover:text-fg",
+          : "bg-surface-2 text-muted elev-0 hover:bg-surface-3 hover:text-fg",
         className,
       )}
     >
@@ -641,7 +641,7 @@ export function Badge({ children, tone = "neutral" }: { children: ReactNode; ton
     <span
       className={cx(
         "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-        tone === "accent" ? "bg-accent-soft text-accent" : "bg-surface-2 text-muted",
+        tone === "accent" ? "bg-accent-soft text-accent" : "bg-surface-2 text-muted elev-0",
       )}
     >
       {children}
