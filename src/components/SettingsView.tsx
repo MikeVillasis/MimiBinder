@@ -353,7 +353,7 @@ function DataCard() {
   return (
     <>
     <Group title="Your data" footer="Export a JSON backup or import one from another device.">
-      <Row label="Export backup" hint="Download your collection as JSON">
+      <Row label="Export backup" hint="Download your collection and grading log as JSON">
         <Button variant="secondary" size="sm" onClick={doExport}>
           Export JSON
         </Button>
@@ -414,7 +414,7 @@ function DataCard() {
         onConfirm={async () => {
           try {
             const r = await importCollection(pending!, mode);
-            setMsg({ ok: true, text: `Imported ${r.entries} entries and ${r.binders} binders.` });
+            setMsg({ ok: true, text: `Imported ${r.entries} entries and ${r.binders} binders${r.assessments ? `, plus ${r.assessments} saved grading ${r.assessments === 1 ? "check" : "checks"}` : ""}.` });
           } catch (e) {
             setMsg({ ok: false, text: e instanceof Error ? e.message : "Import failed." });
           }

@@ -15,7 +15,7 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
     } else if (m.type === "measure") {
       const out = measureFace(m.face, m.quad);
       // Hand the warped pixels over instead of copying them.
-      (self as unknown as Worker).postMessage({ id: m.id, ok: true, result: out }, [out.warp.image.data.buffer]);
+      (self as unknown as Worker).postMessage({ id: m.id, ok: true, result: out }, [out.warp.image.data.buffer, ...out.crops.map((c) => c.image.data.buffer)]);
     } else {
       release(m.face);
       self.postMessage({ id: m.id, ok: true, result: null });

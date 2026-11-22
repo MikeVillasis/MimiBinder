@@ -31,8 +31,9 @@ Supabase (owner-only sync + price history), Recharts, Zod, Vitest. Hosted on Ver
   Price snapshots key on (card_id, variant, stamp, date) after migration 0002.
 - **Search** splits a query into a name and a card number (`src/lib/search-query.ts`): "Zorua 189", "#189",
   "189/159", "TG05".
-- **Centering tool** (`/centering`): a pure-TS engine in `src/lib/centering/` (detect, warp, sub-pixel border
-  fit, worst-point ratios, PSA ceiling) run in a Web Worker; photos never leave the device.
+- **Centering and grading tool** (`/centering`): a pure-TS engine in `src/lib/centering/` run in a Web Worker;
+  photos never leave the device. See "Grading tool" below and `docs/proposals/GRADING_V2.md`.
+  It reports ceilings and flags, never a predicted grade; surface is always "not assessed".
 - Images: TCGdex asset base URL + `/{quality}.webp` where quality is `low` or `high`.
   Use plain `<img loading="lazy">` (not next/image) to stay inside Vercel Hobby image-optimisation quota.
 
@@ -80,7 +81,9 @@ formatMoney(amount: number, currency: Currency): string   // Intl, en-CA
 `src/lib/db/` (client-only Dexie):
 ```ts
 // tables: entries (CollectionEntry, indexes: id, cardId, setId, serieId, updatedAt), binders (Binder),
-//         settings (single row key "settings"), cardCache (CardDetail + cachedAt, for offline pricing)
+//         settings (single row key "settings"), cardCache (CardDetail + cachedAt, for offline pricing),
+//         assessments (GradingAssessment, indexes: id, cardId, entryId, createdAt, updatedAt; schema v2,
+//         local only: never synced)
 useEntries(): CollectionEntry[] | undefined          // live, excludes tombstones
 useEntry(id: string): CollectionEntry | undefined
 useBinders(): Binder[] | undefined
@@ -92,8 +95,17 @@ createBinder(name: string, description?: string): Promise<Binder>
 updateBinder(id: string, patch: Partial<Binder>): Promise<void>
 removeBinder(id: string): Promise<void>               // tombstone + remove id from entries
 updateSettings(patch: Partial<Settings>): Promise<void>
-exportCollection(): Promise<string>                   // JSON string {version:1, entries, binders, settings}
-importCollection(json: string, mode: "merge" | "replace"): Promise<{ entries: number; binders: number }>
+exportCollection(): Promise<string>                   // JSON string {version:1, entries, binders, settings, assessments}
+importCollection(json: string, mode: "merge" | "replace"): Promise<{ entries: number; binders: number; assessments?: number }>
+  // `assessments` is an extra key of the same version-1 file: older backups (without it) still import and
+  // leave the local grading log alone; older app versions ignore the key.
+// saved grading checks (src/lib/db/assessments.ts):
+useAssessments(cardId?: string): GradingAssessment[] | undefined   // newest first
+saveAssessment(input: NewAssessment): Promise<GradingAssessment>
+updateAssessment(id, patch: { cardName?, entryId?, notes? }): Promise<void>
+recordActualGrade(id, actual: ActualGrade | null): Promise<void>   // the grade PSA returned; rejects 9.5
+deleteAssessment(id): Promise<void>                                // hard delete (nothing to sync)
+accuracySummary(rows): AccuracySummary                             // how the ceilings compared with returned grades
 // raw access for the sync engine:
 db, getChangedSince(iso: string), applyRemote(entries: CollectionEntry[], binders: Binder[])
 ```
@@ -107,6 +119,28 @@ collectionValue(entries, cards: Map<cardId, CardDetail>, settings, fx): { value:
 ```
 `src/lib/useCollectionPrices.ts` (client hook): fetches CardDetail for all owned cardIds via `getCardsBatch`,
 caches in `cardCache`, falls back to cache offline. Returns `{ cards: Map<string, CardDetail>, fx: FxRate | undefined, loading }`.
+
+### Grading tool (owner: UI agent for `src/components/centering/**`, data agent for the engine)
+`src/lib/centering/` (pure TS, no DOM, no dependencies; every step is synchronous and runs in the Worker):
+```ts
+// phase 1: centering
+detectCard(img) -> { quad, confidence } | null;  warpCard(img, quad) -> WarpResult (20 px/mm + 2 mm margin)
+measureBorders(warp, face) -> BorderFit;  computeCentering(fit) -> CenteringResult (worst-point ratios)
+psaCeiling(front, back, { skipFrontAxis? }) -> PsaCeiling;  psaLabel(grade)
+// phase 2: corners and edges as flags (thresholds uncalibrated: CONDITION_THRESHOLDS.calibrated === false)
+assessCondition(warp, fit, face) -> ConditionReport   // 8 zones: status, checked, skipped reasons, defects, crop, marks
+conditionCeiling(reports) -> ConditionCeiling | null  // rule of thumb from flag counts (ceilingFromCounts)
+photoQuality(quad, warp, blurMm) -> PhotoQuality      // retake reasons;  frameQuality(frame) for live preview
+combineCentering(results) / combineCondition(reports) // two or three photos of one face
+borderProfile(card) / looksFullArt(fit)               // set-aware notes, full-art detection
+warpRegion(img, quad, warp, rect, scale)              // sharper evidence crops
+```
+`src/components/centering/`: `CenteringTool` (state, steps, tabs), `core.ts` + `centering.worker.ts` + `engine.ts`
+(Worker with a main-thread fallback), `CornerEditor`, `ResultEditor`, `Readout`, `ConditionPanel` (flags and
+evidence), `Summary` (the two ceilings), `model.ts` (per-photo shots, per-face summary, verdict, saved record,
+share text; unit tested), `LiveCapture` (guided camera where `ImageCapture` exists), `SaveSheet`, `AssessmentLog`.
+Tests: `accuracy*`, `hard-*`, `scans`, `detect`, `mask`, `compute`, `psa` (phase 1); `condition`, `grading`
+(phase 2); `bench.test.ts` prints the accuracy, detection-rate and false-positive tables with `CENTERING_BENCH=1`.
 
 ### Sync + history layer (owner: sync agent)
 - `supabase/migrations/0001_init.sql` — tables `entries`, `binders` (jsonb `data` + `updated_at`, `deleted_at`,

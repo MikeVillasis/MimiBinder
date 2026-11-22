@@ -148,13 +148,13 @@ export function ResultEditor({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="secondary" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => setZoom((z) => Math.max(1, z - 0.5))}>
+        <Button size="sm" variant="secondary" className="min-w-11" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => setZoom((z) => Math.max(1, z - 0.5))}>
           −
         </Button>
         <span className="min-w-12 text-center text-sm tabular-nums" aria-live="polite">
           {Math.round(zoom * 100)}%
         </span>
-        <Button size="sm" variant="secondary" aria-label="Zoom in" disabled={zoom >= 4} onClick={() => setZoom((z) => Math.min(4, z + 0.5))}>
+        <Button size="sm" variant="secondary" className="min-w-11" aria-label="Zoom in" disabled={zoom >= 4} onClick={() => setZoom((z) => Math.min(4, z + 0.5))}>
           +
         </Button>
         <Button size="sm" variant="ghost" className="ml-auto" disabled={!edited} onClick={() => { onChange(origFit); setSel(null); }}>

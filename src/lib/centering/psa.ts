@@ -25,13 +25,19 @@ export interface PsaCeiling {
   measured: { front: boolean; back: boolean };
 }
 
-/** Best PSA grade the measured centering allows. Pass null for a face that was not measured. */
-export function psaCeiling(front: CenteringResult | null, back: CenteringResult | null): PsaCeiling {
+/**
+ * Best PSA grade the measured centering allows. Pass null for a face that was not measured.
+ * `skipFrontAxis` leaves one front axis out: sets that are off-centre by design on that axis (e-Card's deep
+ * left strip, EX Dragon's deep bottom border; see era.ts) cannot be judged against the table as measured.
+ */
+export function psaCeiling(front: CenteringResult | null, back: CenteringResult | null, opts?: { skipFrontAxis?: "lr" | "tb" }): PsaCeiling {
   const EPS = 1e-6;
   const axes: { face: "front" | "back"; name: string; ratio: number }[] = [];
   for (const [face, r] of [["front", front], ["back", back]] as const) {
     if (!r) continue;
-    axes.push({ face, name: "left/right", ratio: r.lr.worst }, { face, name: "top/bottom", ratio: r.tb.worst });
+    const skip = face === "front" ? opts?.skipFrontAxis : undefined;
+    if (skip !== "lr") axes.push({ face, name: "left/right", ratio: r.lr.worst });
+    if (skip !== "tb") axes.push({ face, name: "top/bottom", ratio: r.tb.worst });
   }
   const measured = { front: front !== null, back: back !== null };
   const limit = (l: PsaCenteringLimit, face: "front" | "back") => (face === "front" ? l.frontMax : l.backMax);
@@ -49,4 +55,10 @@ export function psaCeiling(front: CenteringResult | null, back: CenteringResult 
     prevFail = worst;
   }
   return { grade: 1, label: "Poor", limitedBy: prevFail && describe(prevFail), measured };
+}
+
+/** PSA's name for a whole grade, e.g. 8 → "NM-MT". */
+export function psaLabel(grade: number): string {
+  const names: Record<number, string> = { 10: "Gem Mint", 9: "Mint", 8: "NM-MT", 7: "NM", 6: "EX-MT", 5: "EX", 4: "VG-EX", 3: "VG", 2: "Good", 1: "Poor" };
+  return names[Math.floor(grade)] ?? "";
 }

@@ -48,6 +48,8 @@ export interface BorderFit {
   inner: Record<Side, Line>;
   /** 0..1 per side: how consistent the edge samples were. Low = ask the user to check that line. */
   quality: Record<Side, number>;
+  /** 0..1 per side for the printed frame alone (0 = no frame line found). Set by measureBorders. */
+  innerQuality?: Record<Side, number>;
   /** Pixels per mm of the canvas the lines live in (copied from WarpResult). */
   pxPerMm: number;
 }

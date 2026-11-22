@@ -2,6 +2,7 @@
 import type { Point, Quad, RGBAImage, WarpResult } from "./types";
 import { CARD_MM } from "./types";
 import { applyH, homographyFrom4, type Mat3 } from "./geometry";
+import { sampleRGB } from "./image";
 
 export const DEFAULT_PX_PER_MM = 20;
 export const DEFAULT_MARGIN_MM = 2;
@@ -66,4 +67,33 @@ export function warpCard(img: RGBAImage, quad: Quad, opts?: { pxPerMm?: number; 
     }
   }
   return { image: { width: W, height: Hh, data: out }, pxPerMm, marginPx };
+}
+
+/**
+ * Re-sample a rectangle of the warped canvas straight from the photo, at `scale` times the canvas resolution.
+ * For evidence crops: when the photo is sharper than the 20 px/mm canvas, the crop keeps that detail instead of
+ * being an enlargement of the canvas. `rect` is in canvas pixels; the result is rect.w·scale by rect.h·scale.
+ */
+export function warpRegion(
+  img: RGBAImage,
+  quad: Quad,
+  warp: Pick<WarpResult, "pxPerMm" | "marginPx">,
+  rect: { x: number; y: number; w: number; h: number },
+  scale: number,
+): RGBAImage {
+  const H = canvasToImageH(quad, warp.pxPerMm, warp.marginPx);
+  const W = Math.max(1, Math.round(rect.w * scale)), Hh = Math.max(1, Math.round(rect.h * scale));
+  const out = new Uint8ClampedArray(W * Hh * 4);
+  const rgb = [0, 0, 0];
+  for (let y = 0; y < Hh; y++) {
+    const v = rect.y + (y + 0.5) / scale;
+    for (let x = 0; x < W; x++) {
+      const u = rect.x + (x + 0.5) / scale;
+      const w = H[6] * u + H[7] * v + H[8];
+      sampleRGB(img, (H[0] * u + H[1] * v + H[2]) / w, (H[3] * u + H[4] * v + H[5]) / w, rgb);
+      const o = (y * W + x) * 4;
+      out[o] = rgb[0]; out[o + 1] = rgb[1]; out[o + 2] = rgb[2]; out[o + 3] = 255;
+    }
+  }
+  return { width: W, height: Hh, data: out };
 }

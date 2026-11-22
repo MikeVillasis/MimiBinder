@@ -3,7 +3,7 @@
 The original Mac session is being retired, so work continues in the cloud or on Windows.
 
 ## First steps
-1. Read `README.md`, `docs/ARCHITECTURE.md`, `AGENTS.md` and `docs/research/PSA grade prediction from photos.md`.
+1. Read `README.md`, `docs/ARCHITECTURE.md`, `AGENTS.md`, `docs/research/PSA grade prediction from photos.md` and `docs/proposals/GRADING_V2.md`.
 2. Run `npm install`, `npm run typecheck`, `npm test` and `npm run build` to confirm a clean baseline.
 3. Tell the owner you're set up and ask which card should inspire the next theme (they'll send an image).
 
@@ -25,9 +25,9 @@ MimiBinder is a free, non-commercial, MIT-licensed Pokémon TCG collection and p
 
 ## Open items (priority order)
 1. **Owner action: run `supabase/migrations/0002_stamped_printings.sql`** in the Supabase SQL editor (after the deploy that contains it). Until then the daily snapshot records regular printings only; stamped printings (Pokémon Center etc.) get no price history.
-2. **Real-phone checks:** shader smoothness and battery (Spatial Rift, Star Requiem); card inspector pinch, twist, two-finger move, native long-press menu suppression and flick friction; and the centering tool on real photos.
-3. **Validate centering on real cards** (research report, phase 1): ~10 cards scanned at 1200 dpi as ground truth, each photographed 5 times; show whole-number ratios only if the worst error stays ≤ ~1 point. Synthetic accuracy today: max 0.27 points (normal), 0.80 (heavy blur/noise). Known weak spots: card on a background close to its border colour (silver on white/grey), drop shadows, strong straight lines right next to the card edge.
-4. **PSA phase 2:** classical corner and edge checks (whitening against the sampled border colour, strongest on the blue back), shown as flags with evidence crops, not subgrades.
+2. **Real-phone checks:** shader smoothness and battery (Spatial Rift, Star Requiem); card inspector pinch, twist, two-finger move, native long-press menu suppression and flick friction; and the centering tool on real photos (speed per photo, the guided camera on Android Chrome, the camera-app path on iPhone).
+3. **Validate centering on real cards** (research report, phase 1): ~10 cards scanned at 1200 dpi as ground truth, each photographed 5 times; show whole-number ratios only if the worst error stays ≤ ~1 point. Synthetic accuracy today: max 0.22 points (standard), 0.80 (heavy blur/noise), real scans within 0.42; hard scenes 235 of 240 (`CENTERING_BENCH=centering`). Known weak spots: card on a background close to its border colour (silver on white/grey), drop shadows, strong straight lines right next to the card edge.
+4. **Grading v2 (branch `claude/grading-upgrades`, see `docs/proposals/GRADING_V2.md`):** phase 2 is built. Corner and edge flags (whitening, chips, worn or dinged tips) with evidence crops, a probable ceiling next to the centering ceiling, retake prompts, several photos per face, full-art suggestion, set notes, a guided camera, and a local grading log where the returned PSA grade is recorded. Needs the owner's review and answers to the open questions in that doc. **The flag thresholds are uncalibrated** (tuned on synthetic wear only: 0 false flags in 152 clean synthetic photos, whitening 0.25 mm deep or more found 94–100% of the time on a dark table, thinner whitening about two times in three). Next: photograph real mint and worn cards and retune; then decide whether saved checks should sync.
 5. **More card-inspired themes:** follow the Spatial Rift (Palkia) and Star Requiem (Giratina) pattern.
 6. **Japanese cards follow-ups:** the JP badge sits over the name strip on full-art images; many Japanese cards (all of the newest Mega sets) have no TCGdex image yet.
 7. **Fun upgrades (branch `claude/fun-upgrades`, see `docs/proposals/FUN_UPGRADES.md`):** items 1–10 are built (binder pocket pages, holo tilt, "Added!" reveal, set milestones, dealt-in grids, hold ring and coach hint, Home total count-up, "New" badge, card-fan empty states, Settings › Feel). Needs the owner's review and a real-phone check (haptics, swipe paging, reveal smoothness), then answers to the open questions in that doc before items 11–19.
