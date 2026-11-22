@@ -9,6 +9,7 @@ import type { CardDetail } from "@/lib/types";
 import { CardImage } from "../CardImage";
 import { Button, PageHeader, SectionHeader, Surface, cx } from "../ui";
 import { AssessmentLog } from "./AssessmentLog";
+import { fullArtReason } from "./fullArt";
 import { CaptureButtons } from "./CaptureButtons";
 import { ConditionPanel } from "./ConditionPanel";
 import { CornerEditor } from "./CornerEditor";
@@ -53,10 +54,12 @@ interface FaceState {
   detectMs: number;
   /** Earlier, finished photos of this face (averaged with the current one). */
   earlier: Shot[];
+  /** The user has seen the lines and accepted or moved them (until then an all-dashed front is not trusted). */
+  confirmed: boolean;
   error: string | null;
 }
 
-const EMPTY: FaceState = { status: "empty", busy: "", quad: null, detected: null, note: null, placed: true, rot: 0, fit: null, origFit: null, extras: null, detectMs: 0, earlier: [], error: null };
+const EMPTY: FaceState = { status: "empty", busy: "", quad: null, detected: null, note: null, placed: true, rot: 0, fit: null, origFit: null, extras: null, detectMs: 0, earlier: [], confirmed: false, error: null };
 
 /** Heavy buffers live here (references only): the decoded photo and the warped card. */
 interface Buffers {
@@ -89,12 +92,17 @@ const TIPS = [
 ];
 
 /** The current photo as a finished shot, when it is measured. */
-function currentShot(st: FaceState): Shot | null {
+function currentShot(st: FaceState, face: Face): Shot | null {
   if (st.status !== "measured" || !st.fit || !st.extras) return null;
-  return { centering: safeCentering(st.fit), condition: st.extras.condition, quality: st.extras.quality, evidence: st.extras.evidence, thumb: st.extras.thumb };
+  // A front where every frame line is low-confidence (dashed) is probably a full-art card: its ratios mean
+  // nothing, so they do not set a ceiling until the user confirms or moves the lines.
+  const unreliable = face === "front" && !st.confirmed && lowEverywhere(st.fit);
+  return { centering: unreliable ? null : safeCentering(st.fit), condition: st.extras.condition, quality: st.extras.quality, evidence: st.extras.evidence, thumb: st.extras.thumb };
 }
-const shotsOf = (st: FaceState): Shot[] => {
-  const cur = currentShot(st);
+/** Every side's frame line is low-confidence (drawn dashed). */
+const lowEverywhere = (fit: BorderFit) => (["left", "right", "top", "bottom"] as Side[]).every((s) => fit.quality[s] < 0.6);
+const shotsOf = (st: FaceState, face: Face): Shot[] => {
+  const cur = currentShot(st, face);
   return cur ? [...st.earlier, cur] : st.earlier;
 };
 
@@ -206,7 +214,10 @@ export function CenteringTool() {
   const [faces, setFaces] = useState<Record<Face, FaceState>>({ front: EMPTY, back: EMPTY });
   const [bufs, setBufs] = useState<Record<Face, Buffers>>({ front: { decoded: null, warp: null }, back: { decoded: null, warp: null } });
   const [tab, setTab] = useState<Face>("front");
-  const [frontSkipped, setFrontSkipped] = useState(false);
+  // null = follow the card's rarity (full-art cards start ticked); true/false = the user chose.
+  const [skipChoice, setSkipChoice] = useState<boolean | null>(null);
+  /** Faces where the "take a second photo" suggestion was skipped. */
+  const [secondSkipped, setSecondSkipped] = useState<Record<Face, boolean>>({ front: false, back: false });
   const [focusSide, setFocusSide] = useState<{ face: Face; side: Side; n: number } | null>(null);
   const engine = useRef<CenteringEngine | null>(null);
   const token = useRef<Record<Face, number>>({ front: 0, back: 0 });
@@ -303,7 +314,7 @@ export function CenteringTool() {
 
   /** Keep the current photo's result and get ready for another photo of the same face. */
   const addShot = (face: Face) => {
-    const cur = currentShot(faces[face]);
+    const cur = currentShot(faces[face], face);
     if (!cur) return;
     token.current[face]++;
     dropBuffers(face);
@@ -317,12 +328,13 @@ export function CenteringTool() {
     token.current.back++;
     (["front", "back"] as Face[]).forEach(dropBuffers);
     setFaces({ front: EMPTY, back: EMPTY });
-    setFrontSkipped(false);
+    setSkipChoice(null);
+    setSecondSkipped({ front: false, back: false });
     setTab("front");
   };
 
   const toggleSkip = (on: boolean) => {
-    setFrontSkipped(on);
+    setSkipChoice(on);
     if (on) {
       token.current.front++;
       dropBuffers("front");
@@ -331,17 +343,19 @@ export function CenteringTool() {
   };
 
   const card = cardParam.card;
+  const fullArtWhy = useMemo(() => fullArtReason(card), [card]);
+  const frontSkipped = skipChoice ?? !!fullArtWhy;
   const profile: BorderProfile | null = useMemo(() => (card ? borderProfile({ id: card.id, setId: card.setId, serieId: card.serieId, rarity: card.rarity }) : null), [card]);
   const saveCard: SaveCard | null = useMemo(() => (card ? { id: card.id, name: card.name, detail: `${card.setName} #${card.localId}` } : null), [card]);
 
-  const fsum = useMemo(() => (frontSkipped ? null : summarizeFace("front", shotsOf(faces.front))), [faces.front, frontSkipped]);
-  const bsum = useMemo(() => summarizeFace("back", shotsOf(faces.back)), [faces.back]);
+  const fsum = useMemo(() => (frontSkipped ? null : summarizeFace("front", shotsOf(faces.front, "front"))), [faces.front, frontSkipped]);
+  const bsum = useMemo(() => summarizeFace("back", shotsOf(faces.back, "back")), [faces.back]);
   const v = useMemo(() => verdict(fsum, bsum, profile), [fsum, bsum, profile]);
 
   const tabLabel = (face: Face) => {
     if (face === "front" && frontSkipped) return "Skipped";
     const st = faces[face];
-    const n = shotsOf(st).length;
+    const n = shotsOf(st, face).length;
     if (st.status === "measured" || (st.status === "empty" && n > 0)) return n > 1 ? `Measured (${n} photos)` : "Measured";
     return st.status === "empty" ? "" : st.status === "error" ? "Problem" : "In progress";
   };
@@ -356,7 +370,7 @@ export function CenteringTool() {
     : tab === "front" && frontSkipped
       ? "measure the back."
       : cur.status === "empty" || cur.status === "error"
-        ? shotsOf(cur).length
+        ? shotsOf(cur, tab).length
           ? `add another photo of the ${tab}, or measure the ${tab === "front" ? "back" : "front"}.`
           : `take a photo of the ${tab}.`
         : cur.status === "corners"
@@ -435,12 +449,15 @@ export function CenteringTool() {
               // re-centred upright instead.
               patch(tab, { rot, quad: st.placed ? alignQuad(st.quad, d.width, d.height, rot) : defaultQuad(d.width, d.height, rot) });
             }}
-            onFit={(fit) => patch(tab, { fit })}
+            onFit={(fit) => patch(tab, { fit, confirmed: true })}
             onCheck={(side) => setFocusSide({ face: tab, side, n: Date.now() })}
             onOther={() => setTab(tab === "front" ? "back" : "front")}
             onAddShot={() => addShot(tab)}
+            secondSkipped={secondSkipped[tab]}
+            onSkipSecond={() => setSecondSkipped((s) => ({ ...s, [tab]: true }))}
             onDropEarlier={() => dropEarlier(tab)}
             onFullArt={() => toggleSkip(true)}
+            onConfirmLines={() => patch(tab, { confirmed: true })}
             onResult={() => summaryRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" })}
             allDone={allDone}
           />
@@ -452,7 +469,7 @@ export function CenteringTool() {
               <span className="font-medium">Full-art card (no border to measure)</span>
               <span className="block text-[13px] text-muted">
                 Skips the front. Front centering is not measured.
-                {profile?.likelyFullArt && !frontSkipped ? ` This card's rarity (${card?.rarity}) is usually full art.` : ""}
+                {fullArtWhy ? (frontSkipped ? ` Ticked because ${fullArtWhy}. Untick to measure the front anyway.` : ` This card's front may be full art: ${fullArtWhy}.`) : ""}
               </span>
             </span>
           </label>
@@ -491,8 +508,11 @@ function FacePanel({
   onCheck,
   onOther,
   onAddShot,
+  secondSkipped,
+  onSkipSecond,
   onDropEarlier,
   onFullArt,
+  onConfirmLines,
   onResult,
 }: {
   face: Face;
@@ -510,14 +530,19 @@ function FacePanel({
   onCheck: (s: Side) => void;
   onOther: () => void;
   onAddShot: () => void;
+  secondSkipped: boolean;
+  onSkipSecond: () => void;
   onDropEarlier: () => void;
   onFullArt: () => void;
+  onConfirmLines: () => void;
   onResult: () => void;
 }) {
   const result = useMemo(() => (state.fit ? safeCentering(state.fit) : null), [state.fit]);
   const warn = useMemo(() => (state.fit ? (["left", "right", "top", "bottom"] as Side[]).filter((s) => state.fit!.quality[s] < 0.6) : []), [state.fit]);
   const other = face === "front" ? "back" : "front";
   const earlier = state.earlier.length;
+  // After the first measured photo of a face, suggest a second one (skippable; never for a third).
+  const suggestSecond = state.status === "measured" && earlier === 0 && !secondSkipped && !(face === "front" && !!state.fit && !!state.origFit && (looksFullArt(state.origFit) || (!state.confirmed && lowEverywhere(state.fit))));
 
   if (state.status === "working") return <Spinner label={state.busy} />;
 
@@ -615,27 +640,58 @@ function FacePanel({
 
   if (state.status === "measured" && state.fit && state.origFit && bufs.warp && state.extras) {
     const x = state.extras;
-    const fullArt = face === "front" && looksFullArt(state.origFit);
+    const allLow = face === "front" && !state.confirmed && lowEverywhere(state.fit);
+    const fullArt = face === "front" && (looksFullArt(state.origFit) || allLow);
     return (
       <Surface padded className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold capitalize tracking-tight">
           {face} centering{earlier ? <span className="normal-case text-muted"> · photo {earlier + 1}</span> : null}
         </h2>
         {fullArt && (
-          <div role="status" className="rounded-ui-md bg-accent-soft p-3 text-sm">
-            <p className="font-semibold">This looks like a full-art card.</p>
-            <p className="mt-0.5 text-[13px] text-muted">No printed border was found on the front, so the ratios below are not meaningful. Full-art fronts cannot be measured for centering.</p>
-            <Button className="mt-2" size="sm" onClick={onFullArt}>
-              Treat as full art (skip the front)
-            </Button>
+          <div role="alert" className="flex flex-col gap-2 rounded-ui-md bg-accent-soft p-3 text-sm" data-testid="full-art-prompt">
+            <p className="font-semibold">This looks like a full-art card. Skip the front?</p>
+            <p className="text-[13px] text-muted">
+              {allLow && !looksFullArt(state.origFit)
+                ? "No clear printed border was found: every frame line below is dashed, so the ratios are not reliable and are not counted in the result yet."
+                : "No printed border was found on the front, so the ratios below are not meaningful. Full-art fronts cannot be measured for centering."}{" "}
+              {allLow ? "Skip the front, or move the lines onto the real border (or accept them) to count it." : ""}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={onFullArt}>
+                Treat as full art (skip the front)
+              </Button>
+              {allLow && (
+                <Button size="sm" variant="secondary" onClick={onConfirmLines}>
+                  Use these lines anyway
+                </Button>
+              )}
+            </div>
           </div>
         )}
         <QualityNote quality={x.quality} />
         <Readout result={result} fit={state.fit} onCheck={onCheck} />
         <ResultEditor image={bufs.warp} fit={state.fit} origFit={state.origFit} onChange={onFit} warn={warn} focus={focusSide} />
+        {suggestSecond && (
+          <div role="region" aria-label="Second photo suggestion" className="flex flex-col gap-3 rounded-ui-md bg-accent-soft p-3" data-testid={`${face}-second-prompt`}>
+            <div>
+              <p className="text-sm font-semibold">Take a second photo of the {face} for a steadier reading</p>
+              <p className="mt-0.5 text-[13px] text-muted">Lift the card, put it down again and shoot once more. The result becomes the average, and you see how well the photos agree.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={onAddShot} data-testid={`${face}-second-take`}>
+                Take a second photo
+              </Button>
+              <Button variant="ghost" onClick={onSkipSecond} data-testid={`${face}-second-skip`}>
+                Skip
+              </Button>
+            </div>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           {allDone ? (
-            <Button onClick={onResult}>See the result</Button>
+            <Button variant={suggestSecond ? "secondary" : "primary"} onClick={onResult}>
+              See the result
+            </Button>
           ) : (
             !otherMeasured && (
               <Button variant="secondary" onClick={onOther}>
@@ -646,7 +702,7 @@ function FacePanel({
           <Button variant="secondary" onClick={onToCorners}>
             Adjust corners
           </Button>
-          {earlier + 1 < MAX_SHOTS && (
+          {earlier + 1 < MAX_SHOTS && !suggestSecond && (
             <Button variant="secondary" onClick={onAddShot}>
               Add another photo of the {face}
             </Button>

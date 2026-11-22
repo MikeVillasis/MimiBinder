@@ -213,15 +213,15 @@ function Overlay({ face, onClose, onPhoto, onFallback }: { face: Face; onClose: 
                 <span className={`block h-full rounded-full ${sharp >= 0.55 ? "bg-emerald-400" : "bg-amber-300"}`} style={{ width: `${Math.round(Math.min(1, sharp) * 100)}%` }} />
               </span>
             </div>
-            <div className="flex items-center justify-center">
+            <div className="flex items-center justify-center pt-1">
               <button
                 type="button"
                 onClick={shoot}
                 disabled={!ready || busy}
                 aria-label={`Take the ${face} photo`}
-                className="flex h-[72px] w-[72px] items-center justify-center rounded-full border-4 border-white outline-none focus-visible:ring-4 focus-visible:ring-white/60 disabled:opacity-40"
+                className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white outline-none focus-visible:ring-4 focus-visible:ring-white/60 disabled:opacity-40"
               >
-                <span className={`block h-14 w-14 rounded-full ${busy ? "bg-white/50" : "bg-white"}`} />
+                <span className={`block h-16 w-16 rounded-full ${busy ? "bg-white/50" : "bg-white"}`} />
               </button>
             </div>
             <p className="text-center text-xs text-white/70">The photo is taken at full resolution and stays on this device.</p>

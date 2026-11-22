@@ -125,6 +125,7 @@ export function Summary({
             <p className="mt-1 text-sm text-muted">Nothing measured here rules out a 10. Surface is not assessed, and it decides 9 versus 10 most often.</p>
           )}
           {frontSkipped && <p className="mt-1 text-sm text-muted">Front centering is not measured (full-art card).</p>}
+          {!frontSkipped && front && !front.centering && <p className="mt-1 text-sm text-muted">Front centering is not counted: no reliable border was found. Skip the front if this is a full-art card, or adjust the lines.</p>}
           {!frontSkipped && !front && <p className="mt-1 text-sm text-muted">The front has not been measured, so it does not count yet.</p>}
           {!back && <p className="mt-1 text-sm text-muted">The back has not been measured, so it does not count yet.</p>}
         </div>
