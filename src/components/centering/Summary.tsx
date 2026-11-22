@@ -9,11 +9,14 @@ import { ratio } from "./format";
 import { summaryText, whiteningGap, type FaceSummary, type Verdict } from "./model";
 import { SaveSheet, type SaveCard } from "./SaveSheet";
 
-function worstOf(r: CenteringResult | null | undefined) {
-  return r ? Math.max(r.lr.worst, r.tb.worst) : null;
+/** The axis that counts: the worse one, leaving out an axis the set is off-centre on by design. */
+function worstOf(r: CenteringResult | null | undefined, skip?: "lr" | "tb") {
+  if (!r) return null;
+  return skip === "lr" ? r.tb.worst : skip === "tb" ? r.lr.worst : Math.max(r.lr.worst, r.tb.worst);
 }
 
-function Cell({ limit, worst }: { limit: number; worst: number | null }) {
+/** `plain`: on the highlighted row the tinted background lowers the contrast of green and red, so use the text colour. */
+function Cell({ limit, worst, plain }: { limit: number; worst: number | null; plain?: boolean }) {
   const pass = worst != null && worst <= limit;
   return (
     <td className="px-2 py-2">
@@ -21,9 +24,9 @@ function Cell({ limit, worst }: { limit: number; worst: number | null }) {
       {worst == null ? (
         <span className="text-muted">n/a</span>
       ) : pass ? (
-        <span className="font-semibold text-good">✓ pass</span>
+        <span className={`font-semibold ${plain ? "text-fg" : "text-good"}`}>✓ pass</span>
       ) : (
-        <span className="font-semibold text-danger">✗ over</span>
+        <span className={`font-semibold ${plain ? "text-fg" : "text-danger"}`}>✗ over</span>
       )}
     </td>
   );
@@ -71,7 +74,7 @@ export function Summary({
   // The phone's share sheet where there is one, else the clipboard. Detected after mount (no SSR mismatch).
   const hasShare = useSyncExternalStore(noopSubscribe, canShare, () => false);
   const ceiling = v.centering;
-  const fw = worstOf(front?.centering);
+  const fw = worstOf(front?.centering, profile?.asymmetric?.axis);
   const bw = worstOf(back?.centering);
   const flags = flagCount(front) + flagCount(back);
   const faces = [front, back].filter((f): f is FaceSummary => !!f);
@@ -204,15 +207,15 @@ export function Summary({
                 <th scope="row" className="px-2 py-2 font-semibold">
                   {row.grade} <span className="text-xs font-normal text-muted">{row.label}</span>
                 </th>
-                <Cell limit={row.frontMax} worst={fw} />
-                <Cell limit={row.backMax} worst={bw} />
+                <Cell limit={row.frontMax} worst={fw} plain={ceiling?.grade === row.grade} />
+                <Cell limit={row.backMax} worst={bw} plain={ceiling?.grade === row.grade} />
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <p className="mt-2 text-[13px] text-muted tabular-nums">
-        This card: front {fw != null ? `${ratio(fw)} (worst axis)` : "not measured"} · back {bw != null ? `${ratio(bw)} (worst axis)` : "not measured"}
+        This card: front {fw != null ? `${ratio(fw)} (${profile?.asymmetric ? (profile.asymmetric.axis === "lr" ? "top/bottom only" : "left/right only") : "worst axis"})` : "not measured"} · back {bw != null ? `${ratio(bw)} (worst axis)` : "not measured"}
       </p>
 
       <ul className="mt-4 flex list-disc flex-col gap-1.5 pl-5 text-[13px] leading-relaxed text-muted">

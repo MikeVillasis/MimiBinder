@@ -74,9 +74,15 @@ function Overlay({ face, onClose, onPhoto, onFallback }: { face: Face; onClose: 
     };
   }, []);
 
+  // Focus, Escape and scroll lock: once per opening (the latest onClose is read through a ref, so a parent
+  // re-render does not move the focus back to the close button).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
   useEffect(() => {
     closeRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCloseRef.current();
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -84,7 +90,7 @@ function Overlay({ face, onClose, onPhoto, onFallback }: { face: Face; onClose: 
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
-  }, [onClose]);
+  }, []);
 
   // Live hints from small preview frames.
   useEffect(() => {
