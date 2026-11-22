@@ -3,20 +3,38 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { getCard } from "@/lib/api-client";
-import type { BorderFit, Face, Quad, RGBAImage, Side } from "@/lib/centering";
+import { borderProfile, looksFullArt, QUALITY_LIMITS } from "@/lib/centering";
+import type { BorderFit, BorderProfile, ConditionReport, Face, PhotoQuality, QualityIssue, Quad, RGBAImage, Side } from "@/lib/centering";
 import type { CardDetail } from "@/lib/types";
 import { CardImage } from "../CardImage";
-import { Button, PageHeader, SectionHeader, Surface } from "../ui";
+import { Button, PageHeader, SectionHeader, Surface, cx } from "../ui";
+import { AssessmentLog } from "./AssessmentLog";
 import { CaptureButtons } from "./CaptureButtons";
+import { ConditionPanel } from "./ConditionPanel";
 import { CornerEditor } from "./CornerEditor";
 import { alignQuad, toPhoto, turn, uprightRotation, viewSize, type Rotation } from "./orient";
 import { decodePhoto, type Decoded } from "./decode";
 import { CenteringEngine } from "./engine";
+import { buildEvidence, thumbnail, type Evidence } from "./evidence";
+import { summarizeFace, verdict, type Shot } from "./model";
 import { Readout } from "./Readout";
 import { ResultEditor, safeCentering } from "./ResultEditor";
+import type { SaveCard } from "./SaveSheet";
 import { Summary } from "./Summary";
 
 const MIN_CONFIDENCE = 0.5;
+/** Photos of one face that are averaged. More adds little and costs the user time. */
+const MAX_SHOTS = 3;
+
+/** What the engine found on the current photo besides the border lines. */
+interface ShotExtras {
+  condition: ConditionReport;
+  quality: PhotoQuality;
+  evidence: Evidence;
+  thumb: string;
+  /** Milliseconds: finding the card, and warp + lines + corner/edge check. */
+  ms: { detect: number; measure: number };
+}
 
 interface FaceState {
   status: "empty" | "working" | "corners" | "measured" | "error";
@@ -31,10 +49,14 @@ interface FaceState {
   rot: Rotation;
   fit: BorderFit | null;
   origFit: BorderFit | null;
+  extras: ShotExtras | null;
+  detectMs: number;
+  /** Earlier, finished photos of this face (averaged with the current one). */
+  earlier: Shot[];
   error: string | null;
 }
 
-const EMPTY: FaceState = { status: "empty", busy: "", quad: null, detected: null, note: null, placed: true, rot: 0, fit: null, origFit: null, error: null };
+const EMPTY: FaceState = { status: "empty", busy: "", quad: null, detected: null, note: null, placed: true, rot: 0, fit: null, origFit: null, extras: null, detectMs: 0, earlier: [], error: null };
 
 /** Heavy buffers live here (references only): the decoded photo and the warped card. */
 interface Buffers {
@@ -60,16 +82,26 @@ function defaultQuad(w: number, h: number, rot: Rotation = 0): Quad {
 
 const TIPS = [
   "Take the card out of its sleeve or top loader.",
-  "Lay it flat on a plain, contrasting surface.",
+  "Lay it flat on a plain, dark surface: wear at the edges shows best against it.",
   "Shoot straight down from 25 to 40 cm.",
   "Use soft, even light with no glare.",
   "Let the card fill most of the frame.",
 ];
 
+/** The current photo as a finished shot, when it is measured. */
+function currentShot(st: FaceState): Shot | null {
+  if (st.status !== "measured" || !st.fit || !st.extras) return null;
+  return { centering: safeCentering(st.fit), condition: st.extras.condition, quality: st.extras.quality, evidence: st.extras.evidence, thumb: st.extras.thumb };
+}
+const shotsOf = (st: FaceState): Shot[] => {
+  const cur = currentShot(st);
+  return cur ? [...st.earlier, cur] : st.earlier;
+};
+
 function Spinner({ label }: { label: string }) {
   return (
     <Surface role="status" className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-surface-3 border-t-accent" aria-hidden="true" />
+      <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-surface-3 border-t-accent motion-reduce:animate-none" aria-hidden="true" />
       <p className="text-sm font-medium">{label}</p>
     </Surface>
   );
@@ -77,7 +109,8 @@ function Spinner({ label }: { label: string }) {
 
 const noopSubscribe = () => () => {};
 
-function CardHeader() {
+/** The card named by ?card=, loaded once. */
+function useCardParam(): { id: string | null; card?: CardDetail; failed: boolean } {
   // Read ?card= after mount instead of useSearchParams: the page then prerenders as plain static HTML
   // (with useSearchParams + Suspense, the prerender left a hidden duplicate of the page in the DOM).
   const search = useSyncExternalStore(noopSubscribe, () => window.location.search, () => "");
@@ -93,19 +126,79 @@ function CardHeader() {
       live = false;
     };
   }, [id]);
+  return { id, card: state.id === id ? state.card : undefined, failed: state.id === id && !!state.failed };
+}
+
+function CardHeader({ id, card, failed }: { id: string | null; card?: CardDetail; failed: boolean }) {
   if (!id) return null;
-  const card = state.id === id ? state.card : undefined;
   return (
     <Surface padded="sm" className="mb-1 flex items-center gap-3">
       <div className="w-14 shrink-0">{card ? <CardImage image={card.image} name={card.name} /> : <div className="skeleton aspect-[63/88] w-full rounded-lg" aria-hidden="true" />}</div>
       <div className="min-w-0 flex-1">
         <div className="text-xs font-medium tracking-wide text-muted">Checking</div>
-        <div className="truncate font-semibold">{card ? card.name : state.id === id && state.failed ? id : "Loading card…"}</div>
+        <div className="truncate font-semibold">{card ? card.name : failed ? id : "Loading card…"}</div>
         <Link href={`/card/${encodeURIComponent(id)}`} className="inline-flex min-h-11 items-center text-sm font-medium text-accent">
           ← Back to card
         </Link>
       </div>
     </Surface>
+  );
+}
+
+type StepState = "done" | "current" | "todo" | "skipped";
+
+/** Where the user is: front, back, result. Not a control (the tabs are); it says what comes next. */
+function Steps({ front, back, result, next }: { front: StepState; back: StepState; result: StepState; next: string }) {
+  const items: [string, StepState][] = [["Front", front], ["Back", back], ["Result", result]];
+  return (
+    <div className="flex flex-col gap-2">
+      <ol className="flex items-center gap-2 text-[13px]" aria-label="Progress">
+        {items.map(([label, s], i) => (
+          <li key={label} className="flex items-center gap-2" aria-current={s === "current" ? "step" : undefined}>
+            {i > 0 && <span className="h-px w-4 bg-line sm:w-8" aria-hidden="true" />}
+            <span
+              className={cx(
+                "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                s === "done" ? "bg-good text-bg" : s === "current" ? "bg-accent text-accent-fg" : "bg-surface-2 text-muted",
+              )}
+              aria-hidden="true"
+            >
+              {s === "done" ? "✓" : s === "skipped" ? "–" : i + 1}
+            </span>
+            <span className={cx(s === "current" ? "font-semibold text-fg" : "text-muted")}>
+              {label}
+              <span className="sr-only">{s === "done" ? " (done)" : s === "skipped" ? " (skipped)" : s === "current" ? " (current step)" : ""}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      <p className="text-sm" role="status" aria-live="polite">
+        <span className="font-semibold">Next:</span> {next}
+      </p>
+    </div>
+  );
+}
+
+const ISSUE_TEXT: Record<QualityIssue, (q: PhotoQuality) => string> = {
+  blurry: (q) => `The photo is soft (the card's edge is blurred by about ${q.blurMm.toFixed(2)} mm). Tap the card to focus and hold still.`,
+  glare: () => "Glare covers part of the card. Tilt the card or move the light.",
+  lowRes: (q) => `The card is only about ${Math.round(q.pxPerMm * 88)} px tall in this photo (${Math.round(QUALITY_LIMITS.minPxPerMm * 88)} px is the minimum, 1500 px or more is best). Move closer or use the main camera.`,
+  tilted: () => "The photo was taken at an angle. Hold the phone flat, straight above the card.",
+  dark: () => "The photo is dark. Add light.",
+};
+
+function QualityNote({ quality }: { quality: PhotoQuality }) {
+  if (!quality.issues.length) return null;
+  return (
+    <div role="status" className="rounded-ui-md bg-danger/10 p-3 text-sm">
+      <p className="font-semibold text-danger">A retake would help</p>
+      <ul className="mt-1 flex list-disc flex-col gap-1 pl-5 text-[13px] leading-relaxed">
+        {quality.issues.map((i) => (
+          <li key={i}>{ISSUE_TEXT[i](quality)}</li>
+        ))}
+      </ul>
+      <p className="mt-1 text-[13px] text-muted">The numbers below are still measured, but trust them less.</p>
+    </div>
   );
 }
 
@@ -118,6 +211,8 @@ export function CenteringTool() {
   const engine = useRef<CenteringEngine | null>(null);
   const token = useRef<Record<Face, number>>({ front: 0, back: 0 });
   const bitmaps = useRef<Record<Face, ImageBitmap | null>>({ front: null, back: null });
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const cardParam = useCardParam();
 
   const getEngine = () => (engine.current ??= new CenteringEngine());
   const patch = useCallback((face: Face, p: Partial<FaceState>) => setFaces((f) => ({ ...f, [face]: { ...f[face], ...p } })), []);
@@ -143,7 +238,8 @@ export function CenteringTool() {
     const t = ++token.current[face];
     const stale = () => token.current[face] !== t;
     dropBuffers(face);
-    setFaces((f) => ({ ...f, [face]: { ...EMPTY, status: "working", busy: "Reading photo…" } }));
+    // Earlier, finished photos of this face are kept: the new one replaces only the current photo.
+    setFaces((f) => ({ ...f, [face]: { ...EMPTY, earlier: f[face].earlier, status: "working", busy: "Reading photo…" } }));
     try {
       const dec = await decodePhoto(file);
       if (stale()) {
@@ -161,6 +257,7 @@ export function CenteringTool() {
       patch(face, {
         status: "corners",
         rot,
+        detectMs: det.ms,
         quad: good ? alignQuad(det.quad!, dec.width, dec.height, rot) : defaultQuad(dec.width, dec.height, rot),
         detected: det.quad,
         placed: !!det.quad,
@@ -185,7 +282,14 @@ export function CenteringTool() {
       const out = await getEngine().measure(face, quad);
       if (token.current[face] !== t) return;
       setBufs((b) => ({ ...b, [face]: { ...b[face], warp: out.warp.image } }));
-      patch(face, { status: "measured", fit: out.fit, origFit: out.fit });
+      const extras: ShotExtras = {
+        condition: out.condition,
+        quality: out.quality,
+        evidence: buildEvidence(out.warp.image, out.condition, out.crops),
+        thumb: thumbnail(out.warp.image),
+        ms: { detect: faces[face].detectMs, measure: out.ms.warp + out.ms.fit + out.ms.condition },
+      };
+      patch(face, { status: "measured", fit: out.fit, origFit: out.fit, extras });
     } catch (e) {
       if (token.current[face] !== t) return;
       patch(face, { status: "error", error: e instanceof Error ? e.message : "Measuring failed." });
@@ -194,8 +298,19 @@ export function CenteringTool() {
 
   const toCorners = (face: Face) => {
     setBufs((b) => ({ ...b, [face]: { ...b[face], warp: null } }));
-    patch(face, { status: bufs[face].decoded ? "corners" : "empty", fit: null, origFit: null });
+    patch(face, { status: bufs[face].decoded ? "corners" : "empty", fit: null, origFit: null, extras: null });
   };
+
+  /** Keep the current photo's result and get ready for another photo of the same face. */
+  const addShot = (face: Face) => {
+    const cur = currentShot(faces[face]);
+    if (!cur) return;
+    token.current[face]++;
+    dropBuffers(face);
+    setFaces((f) => ({ ...f, [face]: { ...EMPTY, earlier: [...f[face].earlier, cur] } }));
+  };
+
+  const dropEarlier = (face: Face) => patch(face, { earlier: [] });
 
   const reset = () => {
     token.current.front++;
@@ -215,19 +330,47 @@ export function CenteringTool() {
     }
   };
 
-  const fresult = useMemo(() => (!frontSkipped && faces.front.status === "measured" && faces.front.fit ? safeCentering(faces.front.fit) : null), [faces.front, frontSkipped]);
-  const bresult = useMemo(() => (faces.back.status === "measured" && faces.back.fit ? safeCentering(faces.back.fit) : null), [faces.back]);
+  const card = cardParam.card;
+  const profile: BorderProfile | null = useMemo(() => (card ? borderProfile({ id: card.id, setId: card.setId, serieId: card.serieId, rarity: card.rarity }) : null), [card]);
+  const saveCard: SaveCard | null = useMemo(() => (card ? { id: card.id, name: card.name, detail: `${card.setName} #${card.localId}` } : null), [card]);
+
+  const fsum = useMemo(() => (frontSkipped ? null : summarizeFace("front", shotsOf(faces.front))), [faces.front, frontSkipped]);
+  const bsum = useMemo(() => summarizeFace("back", shotsOf(faces.back)), [faces.back]);
+  const v = useMemo(() => verdict(fsum, bsum, profile), [fsum, bsum, profile]);
 
   const tabLabel = (face: Face) => {
     if (face === "front" && frontSkipped) return "Skipped";
-    const s = faces[face].status;
-    return s === "measured" ? "Measured" : s === "empty" ? "" : s === "error" ? "Problem" : "In progress";
+    const st = faces[face];
+    const n = shotsOf(st).length;
+    if (st.status === "measured" || (st.status === "empty" && n > 0)) return n > 1 ? `Measured (${n} photos)` : "Measured";
+    return st.status === "empty" ? "" : st.status === "error" ? "Problem" : "In progress";
   };
+
+  const frontDone = !!fsum, backDone = !!bsum;
+  const stepFront: StepState = frontSkipped ? "skipped" : frontDone ? "done" : tab === "front" ? "current" : "todo";
+  const stepBack: StepState = backDone ? "done" : tab === "back" || frontDone || frontSkipped ? "current" : "todo";
+  const allDone = (frontDone || frontSkipped) && backDone;
+  const cur = faces[tab];
+  const next = allDone
+    ? "see the result below. A second photo of each side makes the numbers steadier."
+    : tab === "front" && frontSkipped
+      ? "measure the back."
+      : cur.status === "empty" || cur.status === "error"
+        ? shotsOf(cur).length
+          ? `add another photo of the ${tab}, or measure the ${tab === "front" ? "back" : "front"}.`
+          : `take a photo of the ${tab}.`
+        : cur.status === "corners"
+          ? cur.placed
+            ? "check the four corners, then tap Measure."
+            : "drag the four corners onto the card."
+          : cur.status === "measured"
+            ? `check the lines, then measure the ${tab === "front" ? "back" : "front"}.`
+            : "one moment…";
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
       <div>
-        <PageHeader title="Centering check" subtitle="Measure a raw card's front and back from phone photos and see the best PSA grade its centering allows." />
+        <PageHeader title="Centering check" subtitle="Measure a raw card's front and back from phone photos: the best PSA grade its centering allows, plus corner and edge wear flags." />
         <p className="-mt-2 flex items-start gap-2 text-sm text-muted">
           <svg viewBox="0 0 24 24" width="16" height="16" className="mt-0.5 shrink-0 text-good" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <rect x="5" y="11" width="14" height="9" rx="2" />
@@ -237,7 +380,9 @@ export function CenteringTool() {
         </p>
       </div>
 
-      <CardHeader />
+      <CardHeader {...cardParam} />
+
+      <Steps front={stepFront} back={stepBack} result={allDone ? "current" : "todo"} next={next} />
 
       <div
         role="tablist"
@@ -256,7 +401,7 @@ export function CenteringTool() {
             className={`ui-motion flex min-h-11 flex-col items-center justify-center rounded-[10px] px-3 py-1 text-sm capitalize ${tab === face ? "bg-surface-3 font-semibold text-fg elev-1" : "font-medium text-muted hover:text-fg"}`}
           >
             {face}
-            <span className={`text-xs font-medium normal-case ${tabLabel(face) === "Measured" ? "text-good" : "text-muted"}`}>{tabLabel(face) || "Not measured"}</span>
+            <span className={`text-xs font-medium normal-case ${tabLabel(face).startsWith("Measured") ? "text-good" : "text-muted"}`}>{tabLabel(face) || "Not measured"}</span>
           </button>
         ))}
       </div>
@@ -265,7 +410,7 @@ export function CenteringTool() {
         {tab === "front" && frontSkipped ? (
           <Surface padded>
             <p className="font-semibold">Front centering is not measured.</p>
-            <p className="mt-1 text-sm text-muted">Full-art cards have no border to measure, so the front will not limit the ceiling.</p>
+            <p className="mt-1 text-sm text-muted">Full-art cards have no border to measure, so the front will not limit the ceiling. The back&apos;s corner and edge check still covers chips and dings, which show on both sides.</p>
             <Button className="mt-3" variant="secondary" onClick={() => setTab("back")}>
               Measure the back
             </Button>
@@ -276,7 +421,7 @@ export function CenteringTool() {
             state={faces[tab]}
             bufs={bufs[tab]}
             focusSide={focusSide?.face === tab ? focusSide : null}
-            otherMeasured={faces[tab === "front" ? "back" : "front"].status === "measured"}
+            otherMeasured={tab === "front" ? backDone : frontDone || frontSkipped}
             onFile={(f) => onFile(tab, f)}
             onMeasure={() => measure(tab)}
             onToCorners={() => toCorners(tab)}
@@ -293,6 +438,11 @@ export function CenteringTool() {
             onFit={(fit) => patch(tab, { fit })}
             onCheck={(side) => setFocusSide({ face: tab, side, n: Date.now() })}
             onOther={() => setTab(tab === "front" ? "back" : "front")}
+            onAddShot={() => addShot(tab)}
+            onDropEarlier={() => dropEarlier(tab)}
+            onFullArt={() => toggleSkip(true)}
+            onResult={() => summaryRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" })}
+            allDone={allDone}
           />
         )}
         {tab === "front" && (
@@ -300,20 +450,27 @@ export function CenteringTool() {
             <input type="checkbox" checked={frontSkipped} onChange={(e) => toggleSkip(e.target.checked)} className="h-5 w-5 accent-[var(--color-accent)]" />
             <span>
               <span className="font-medium">Full-art card (no border to measure)</span>
-              <span className="block text-[13px] text-muted">Skips the front. Front centering is not measured.</span>
+              <span className="block text-[13px] text-muted">
+                Skips the front. Front centering is not measured.
+                {profile?.likelyFullArt && !frontSkipped ? ` This card's rarity (${card?.rarity}) is usually full art.` : ""}
+              </span>
             </span>
           </label>
         )}
       </div>
 
-      {(fresult || bresult) && <Summary front={fresult} back={bresult} frontSkipped={frontSkipped} onReset={reset} />}
-      {!fresult && !bresult && (faces.front.status !== "empty" || faces.back.status !== "empty" || frontSkipped) && (
+      <div ref={summaryRef} className="scroll-mt-20">
+        {(fsum || bsum) && <Summary front={fsum} back={bsum} verdict={v} frontSkipped={frontSkipped} profile={profile} card={saveCard} onReset={reset} />}
+      </div>
+      {!fsum && !bsum && (faces.front.status !== "empty" || faces.back.status !== "empty" || frontSkipped) && (
         <div>
           <Button variant="ghost" onClick={reset}>
             Start over
           </Button>
         </div>
       )}
+
+      <AssessmentLog cardId={cardParam.id ?? undefined} />
     </div>
   );
 }
@@ -324,6 +481,7 @@ function FacePanel({
   bufs,
   focusSide,
   otherMeasured,
+  allDone,
   onFile,
   onMeasure,
   onToCorners,
@@ -332,12 +490,17 @@ function FacePanel({
   onFit,
   onCheck,
   onOther,
+  onAddShot,
+  onDropEarlier,
+  onFullArt,
+  onResult,
 }: {
   face: Face;
   state: FaceState;
   bufs: Buffers;
   focusSide: { side: Side; n: number } | null;
   otherMeasured: boolean;
+  allDone: boolean;
   onFile: (f: File) => void;
   onMeasure: () => void;
   onToCorners: () => void;
@@ -346,9 +509,15 @@ function FacePanel({
   onFit: (f: BorderFit) => void;
   onCheck: (s: Side) => void;
   onOther: () => void;
+  onAddShot: () => void;
+  onDropEarlier: () => void;
+  onFullArt: () => void;
+  onResult: () => void;
 }) {
   const result = useMemo(() => (state.fit ? safeCentering(state.fit) : null), [state.fit]);
   const warn = useMemo(() => (state.fit ? (["left", "right", "top", "bottom"] as Side[]).filter((s) => state.fit!.quality[s] < 0.6) : []), [state.fit]);
+  const other = face === "front" ? "back" : "front";
+  const earlier = state.earlier.length;
 
   if (state.status === "working") return <Spinner label={state.busy} />;
 
@@ -360,8 +529,28 @@ function FacePanel({
             {state.error} Try another photo.
           </p>
         )}
+        {earlier > 0 && (
+          <div className="rounded-ui-md bg-surface-2 p-3 text-sm" role="status">
+            <p className="font-semibold">
+              {earlier} {earlier === 1 ? "photo" : "photos"} of the {face} measured.
+            </p>
+            <p className="mt-0.5 text-[13px] text-muted">
+              Take the card off the table, put it down again and shoot once more: the result becomes the average, and you see how well the photos agree.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {!otherMeasured && (
+                <Button size="sm" variant="secondary" onClick={onOther}>
+                  Measure the {other} instead
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={onDropEarlier}>
+                Discard {earlier === 1 ? "that photo" : "those photos"}
+              </Button>
+            </div>
+          </div>
+        )}
         <div>
-          <SectionHeader title={`${face === "front" ? "Front" : "Back"} photo`} subtitle="A few tips for an accurate reading" className="mb-2" />
+          <SectionHeader title={`${face === "front" ? "Front" : "Back"} photo${earlier ? ` ${earlier + 1}` : ""}`} subtitle="A few tips for an accurate reading" className="mb-2" />
           <ul className="flex flex-col gap-2 text-[13px] text-muted">
             {TIPS.map((t) => (
               <li key={t} className="flex items-start gap-2.5">
@@ -424,23 +613,52 @@ function FacePanel({
     );
   }
 
-  if (state.status === "measured" && state.fit && state.origFit && bufs.warp) {
+  if (state.status === "measured" && state.fit && state.origFit && bufs.warp && state.extras) {
+    const x = state.extras;
+    const fullArt = face === "front" && looksFullArt(state.origFit);
     return (
       <Surface padded className="flex flex-col gap-4">
-        <h2 className="text-lg font-semibold capitalize tracking-tight">{face} centering</h2>
+        <h2 className="text-lg font-semibold capitalize tracking-tight">
+          {face} centering{earlier ? <span className="normal-case text-muted"> · photo {earlier + 1}</span> : null}
+        </h2>
+        {fullArt && (
+          <div role="status" className="rounded-ui-md bg-accent-soft p-3 text-sm">
+            <p className="font-semibold">This looks like a full-art card.</p>
+            <p className="mt-0.5 text-[13px] text-muted">No printed border was found on the front, so the ratios below are not meaningful. Full-art fronts cannot be measured for centering.</p>
+            <Button className="mt-2" size="sm" onClick={onFullArt}>
+              Treat as full art (skip the front)
+            </Button>
+          </div>
+        )}
+        <QualityNote quality={x.quality} />
         <Readout result={result} fit={state.fit} onCheck={onCheck} />
         <ResultEditor image={bufs.warp} fit={state.fit} origFit={state.origFit} onChange={onFit} warn={warn} focus={focusSide} />
         <div className="flex flex-wrap gap-2">
+          {allDone ? (
+            <Button onClick={onResult}>See the result</Button>
+          ) : (
+            !otherMeasured && (
+              <Button variant="secondary" onClick={onOther}>
+                Measure the {other} next
+              </Button>
+            )
+          )}
           <Button variant="secondary" onClick={onToCorners}>
             Adjust corners
           </Button>
-          {!otherMeasured && (
-            <Button variant="secondary" onClick={onOther}>
-              Measure the {face === "front" ? "back" : "front"} next
+          {earlier + 1 < MAX_SHOTS && (
+            <Button variant="secondary" onClick={onAddShot}>
+              Add another photo of the {face}
             </Button>
           )}
         </div>
+        <div className="border-t border-line/40 pt-4">
+          <ConditionPanel face={face} zones={x.condition.zones} evidence={x.evidence} lightBackground={x.condition.lightBackground} heading={earlier ? "Corners and edges (this photo)" : "Corners and edges"} />
+        </div>
         <CaptureButtons face={face} onFile={onFile} retake />
+        <p className="text-xs text-muted tabular-nums" data-testid={`${face}-timing`}>
+          Found in {(x.ms.detect / 1000).toFixed(1)} s, measured in {(x.ms.measure / 1000).toFixed(1)} s on this device · about {Math.round(x.quality.pxPerMm * 88)} px tall
+        </p>
       </Surface>
     );
   }

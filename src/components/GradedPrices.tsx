@@ -1,5 +1,6 @@
 "use client";
 
+import { useAssessments } from "@/lib/db";
 import { gradedLinks, gradedSearchQuery } from "@/lib/graded-links";
 import type { CardDetail } from "@/lib/types";
 import { ListGroup, ListRow } from "./ui";
@@ -10,6 +11,8 @@ import { ListGroup, ListRow } from "./ui";
  */
 export function GradedPrices({ card }: { card: CardDetail }) {
   const q = gradedSearchQuery(card);
+  const saved = useAssessments(card.id);
+  const latest = saved?.[0];
   return (
     <ListGroup
       title="PSA prices"
@@ -26,7 +29,11 @@ export function GradedPrices({ card }: { card: CardDetail }) {
       <ListRow
         href={`/centering?card=${encodeURIComponent(card.id)}`}
         title="What grade could my copy get?"
-        subtitle="Check its centering from photos: the best PSA grade it allows"
+        subtitle={
+          latest
+            ? `${saved!.length} saved ${saved!.length === 1 ? "check" : "checks"}${latest.probableCeiling != null ? `: latest probable ceiling PSA ${latest.probableCeiling}` : ""}${latest.actual ? `, PSA returned ${latest.actual.grade || "Authentic"}` : ""}`
+            : "Check centering, corners and edges from photos: the best PSA grade they allow"
+        }
       />
     </ListGroup>
   );
