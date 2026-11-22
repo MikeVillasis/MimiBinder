@@ -170,6 +170,8 @@ export interface Binder {
 export interface Settings {
   currency: Currency; // default "CAD"
   priceSource: PriceSource; // default "tcgplayer"
+  /** Secret rares count toward set binder completion (total = official + secret). Missing = true. */
+  countSecretRares?: boolean;
 }
 
 export interface FxRate {

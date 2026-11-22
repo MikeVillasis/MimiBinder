@@ -130,9 +130,12 @@ describe("binders", () => {
 
 describe("settings", () => {
   it("defaults and patches", async () => {
-    expect(await getSettings()).toEqual({ currency: "CAD", priceSource: "tcgplayer" });
+    expect(await getSettings()).toEqual({ currency: "CAD", priceSource: "tcgplayer", countSecretRares: true });
     await updateSettings({ priceSource: "cardmarket" });
-    expect(await getSettings()).toEqual({ currency: "CAD", priceSource: "cardmarket" });
+    expect(await getSettings()).toEqual({ currency: "CAD", priceSource: "cardmarket", countSecretRares: true });
+    await updateSettings({ countSecretRares: false });
+    expect((await getSettings()).countSecretRares).toBe(false);
+    expect((await getSettings()).priceSource).toBe("cardmarket"); // other settings kept
   });
 });
 

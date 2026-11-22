@@ -68,6 +68,18 @@ export function SettingsView() {
           />
         </Row>
       </Group>
+      <Group
+        title="Binders"
+        footer="With this on, a set's completion counts its secret rares too (151 becomes x/207 instead of x/165). Turn it off to count only the main set."
+      >
+        <Row label="Count secret rares" hint="Toward set completion">
+          <Switch
+            label="Count secret rares toward set completion"
+            checked={settings.countSecretRares !== false}
+            onChange={(on) => updateSettings({ countSecretRares: on })}
+          />
+        </Row>
+      </Group>
       {configured ? (
         <AccountCard />
       ) : (

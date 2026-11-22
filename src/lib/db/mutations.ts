@@ -147,7 +147,12 @@ export async function removeBinder(id: string): Promise<void> {
 
 export async function getSettings(): Promise<Settings> {
   const row = await db.settings.get(SETTINGS_KEY);
-  return { ...DEFAULT_SETTINGS, ...(row ? { currency: row.currency, priceSource: row.priceSource } : {}) };
+  return {
+    ...DEFAULT_SETTINGS,
+    ...(row
+      ? { currency: row.currency, priceSource: row.priceSource, countSecretRares: row.countSecretRares ?? DEFAULT_SETTINGS.countSecretRares }
+      : {}),
+  };
 }
 
 export async function updateSettings(patch: Partial<Settings>): Promise<void> {
@@ -156,6 +161,7 @@ export async function updateSettings(patch: Partial<Settings>): Promise<void> {
     const next: Settings = {
       currency: patch.currency ?? current.currency,
       priceSource: patch.priceSource ?? current.priceSource,
+      countSecretRares: patch.countSecretRares ?? current.countSecretRares,
     };
     await db.settings.put({ key: SETTINGS_KEY, ...next });
   });
@@ -234,6 +240,7 @@ const exportSchema = z.object({
     .object({
       currency: z.enum(["CAD", "USD"]),
       priceSource: z.enum(["tcgplayer", "cardmarket"]),
+      countSecretRares: z.boolean(),
     })
     .partial()
     .optional(),

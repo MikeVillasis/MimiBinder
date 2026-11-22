@@ -64,7 +64,7 @@ describe("setCompletion", () => {
       entry({ localId: "003", deletedAt: "2026-02-01T00:00:00.000Z" }),
       entry({ localId: "004", setId: "other" }),
     ];
-    expect(setCompletion(es, set151)).toEqual({ owned: 2, total: 165, percent: 1, secret: 2 });
+    expect(setCompletion(es, set151)).toEqual({ owned: 2, total: 165, percent: 1, secret: 2, includesSecret: false });
   });
 
   it("counts secret rares once each, numeric or lettered", () => {
@@ -85,6 +85,45 @@ describe("setCompletion", () => {
     es.push(entry({ localId: "300" }));
     expect(setCompletion(es, set).percent).toBe(100);
     expect(setCompletion([], { ...set151, officialCount: 0 }).percent).toBe(0);
+  });
+});
+
+describe("setCompletion with secret rares", () => {
+  const set = { ...set151, officialCount: 165, totalCount: 207 };
+  const es = [
+    entry({ localId: "001" }),
+    entry({ localId: "165" }),
+    entry({ localId: "199" }), // secret rare
+    entry({ localId: "201" }), // secret rare
+    entry({ localId: "201", variant: "reverse" }), // same secret rare
+  ];
+
+  it("counts secret rares against the full set size when asked", () => {
+    expect(setCompletion(es, set, { includeSecret: true })).toEqual({
+      owned: 4,
+      total: 207,
+      percent: 1,
+      secret: 2,
+      includesSecret: true,
+    });
+  });
+
+  it("keeps the official count by default", () => {
+    expect(setCompletion(es, set)).toMatchObject({ owned: 2, total: 165, secret: 2, includesSecret: false });
+  });
+
+  it("is the official count when a set has no secret rares", () => {
+    expect(setCompletion(es, { ...set, totalCount: 165 }, { includeSecret: true })).toMatchObject({
+      total: 165,
+      includesSecret: false,
+    });
+  });
+
+  it("reaches 100 only when every card including secrets is owned", () => {
+    const small = { ...set151, officialCount: 2, totalCount: 3 };
+    const two = [entry({ localId: "1" }), entry({ localId: "2" })];
+    expect(setCompletion(two, small, { includeSecret: true }).percent).toBe(66);
+    expect(setCompletion([...two, entry({ localId: "3" })], small, { includeSecret: true }).percent).toBe(100);
   });
 });
 

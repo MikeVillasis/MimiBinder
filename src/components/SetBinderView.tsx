@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { getSet } from "@/lib/api-client";
 import { setCompletion } from "@/lib/collection";
-import { useEntries } from "@/lib/db";
+import { useEntries, useSettings } from "@/lib/db";
 import { langOf, splitId } from "@/lib/lang";
 import { MILESTONES } from "@/lib/fun";
 import { PREF, usePref, writePref } from "@/lib/prefs";
@@ -21,6 +21,7 @@ const TICKS = MILESTONES.filter((m) => m < 100);
 export function SetBinderView({ setId }: { setId: string }) {
   const { data: set, error, loading, retry } = useAsync(() => getSet(setId), `${langOf(setId)}:${setId}`);
   const entries = useEntries();
+  const includeSecret = useSettings().countSecretRares !== false;
   const [show, setShow] = useState<Show>("all");
 
   const mine = useMemo(() => (entries ?? []).filter((e) => e.setId === setId), [entries, setId]);
@@ -33,7 +34,7 @@ export function SetBinderView({ setId }: { setId: string }) {
   const view: View = usePref(PREF.setView, "grid") === "pages" ? "pages" : "grid";
   // Milestones read the existing setCompletion result; nothing is recomputed. Wait for both the set
   // and the collection, so a half-loaded 0% never counts.
-  const completion = useMemo(() => (set ? setCompletion(mine, set) : null), [mine, set]);
+  const completion = useMemo(() => (set ? setCompletion(mine, set, { includeSecret }) : null), [mine, set, includeSecret]);
   const { milestone, dismiss } = useMilestone(setId, !!completion && entries !== undefined, completion?.percent ?? 0);
 
   if (loading)
@@ -108,7 +109,9 @@ export function SetBinderView({ setId }: { setId: string }) {
         <ProgressBar percent={c.percent} label={`${set.name} completion`} ticks={TICKS} />
         {c.secret > 0 && (
           <p className="mt-3 text-[13px] text-muted">
-            +{c.secret} secret rare{c.secret === 1 ? "" : "s"} owned, not counted toward completion
+            {c.includesSecret
+              ? `Includes ${c.secret} secret rare${c.secret === 1 ? "" : "s"} you own`
+              : `+${c.secret} secret rare${c.secret === 1 ? "" : "s"} owned, not counted toward completion`}
           </p>
         )}
       </Surface>

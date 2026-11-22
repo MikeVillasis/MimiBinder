@@ -13,7 +13,7 @@ export interface CachedCard extends CardDetail {
   cachedAt: string; // ISO
 }
 
-export const DEFAULT_SETTINGS: Settings = { currency: "CAD", priceSource: "tcgplayer" };
+export const DEFAULT_SETTINGS: Settings = { currency: "CAD", priceSource: "tcgplayer", countSecretRares: true };
 
 export class MimiBinderDB extends Dexie {
   entries!: EntityTable<CollectionEntry, "id">;

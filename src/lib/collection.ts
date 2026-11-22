@@ -33,16 +33,20 @@ export function groupBySerie(entries: CollectionEntry[]): Map<string, Collection
 }
 
 /**
- * Completion counts unique numbered cards (localId 1..officialCount) owned from this set,
- * so secret rares and lettered cards (e.g. "199", "TG01", "GG69") don't push it past 100%.
- * Those are counted separately in `secret` (unique cards beyond the official count).
- * `percent` is floored, so it only reads 100 when the set is complete.
+ * Completion of one set from the owned entries.
+ * - Default ("official"): unique numbered cards 1..officialCount, so secret rares and lettered cards
+ *   (e.g. "199", "TG01", "GG69") don't push it past 100%.
+ * - `includeSecret`: secret rares count too, against the set's full size (totalCount: official + secret),
+ *   e.g. 151 becomes x/207 instead of x/165 (the "master set" view).
+ * `secret` is always the number of unique secret rares owned. `percent` is floored, so it only reads 100
+ * when the set is complete.
  */
 export function setCompletion(
   entries: CollectionEntry[],
   set: SetSummary,
-): { owned: number; total: number; percent: number; secret: number } {
-  const total = set.officialCount;
+  opts: { includeSecret?: boolean } = {},
+): { owned: number; total: number; percent: number; secret: number; includesSecret: boolean } {
+  const official = set.officialCount;
   const owned = new Set<number>();
   const secret = new Set<string>();
   for (const e of entries) {
@@ -50,14 +54,18 @@ export function setCompletion(
     const id = e.localId.trim();
     if (/^\d+$/.test(id)) {
       const n = parseInt(id, 10);
-      if (n >= 1 && n <= total) owned.add(n);
-      else if (n > total) secret.add(String(n));
+      if (n >= 1 && n <= official) owned.add(n);
+      else if (n > official) secret.add(String(n));
     } else if (id) {
       secret.add(id.toUpperCase());
     }
   }
-  const percent = total > 0 ? Math.floor((owned.size / total) * 100) : 0;
-  return { owned: owned.size, total, percent, secret: secret.size };
+  // Only meaningful when the set has secret rares at all (totalCount > officialCount).
+  const includesSecret = !!opts.includeSecret && (set.totalCount ?? 0) > official;
+  const total = includesSecret ? set.totalCount : official;
+  const have = includesSecret ? Math.min(total, owned.size + secret.size) : owned.size;
+  const percent = total > 0 ? Math.floor((have / total) * 100) : 0;
+  return { owned: have, total, percent, secret: secret.size, includesSecret };
 }
 
 /**

@@ -4,7 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { getSeries, getSets } from "@/lib/api-client";
 import { groupBySerie, groupBySet, setCompletion } from "@/lib/collection";
-import { createBinder, useBinders, useEntries } from "@/lib/db";
+import { createBinder, useBinders, useEntries, useSettings } from "@/lib/db";
 import { parseLang, splitId } from "@/lib/lang";
 import { LANG_LABELS, type Lang, type SetSummary } from "@/lib/types";
 import { useAsync } from "./hooks";
@@ -114,7 +114,7 @@ function SetRow({ set, owned, c }: { set: SetSummary; owned: boolean; c?: Return
       }
       trailing={
         <span className="text-[13px] text-muted">
-          {owned && c ? `${c.owned}/${c.total}${c.secret ? ` +${c.secret}` : ""}` : `${set.officialCount} cards`}
+          {owned && c ? `${c.owned}/${c.total}${c.secret && !c.includesSecret ? ` +${c.secret}` : ""}` : `${c?.includesSecret ? set.totalCount : set.officialCount} cards`}
         </span>
       }
     />
@@ -131,6 +131,7 @@ function SearchIcon() {
 }
 
 function SetsTab({ lang }: { lang: Lang }) {
+  const includeSecret = useSettings().countSecretRares !== false;
   const entries = useEntries();
   const { data: sets, error, loading, retry } = useAsync(() => getSets(lang), `sets:${lang}`);
   const [q, setQ] = useState("");
@@ -170,7 +171,7 @@ function SetsTab({ lang }: { lang: Lang }) {
         <Columns
           label="Sets"
           rows={filtered.map((s) => (
-            <SetRow key={s.id} set={s} owned={grouped.has(s.id)} c={grouped.has(s.id) ? setCompletion(grouped.get(s.id)!, s) : undefined} />
+            <SetRow key={s.id} set={s} owned={grouped.has(s.id)} c={grouped.has(s.id) ? setCompletion(grouped.get(s.id)!, s, { includeSecret }) : undefined} />
           ))}
         />
       )}

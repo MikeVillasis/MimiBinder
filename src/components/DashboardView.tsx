@@ -57,10 +57,10 @@ export function DashboardView() {
     const grouped = groupBySet(entries);
     return sets
       .filter((s) => grouped.has(s.id))
-      .map((s) => ({ set: s, c: setCompletion(grouped.get(s.id)!, s) }))
+      .map((s) => ({ set: s, c: setCompletion(grouped.get(s.id)!, s, { includeSecret: settings.countSecretRares !== false }) }))
       .sort((a, b) => b.c.percent - a.c.percent)
       .slice(0, 4);
-  }, [entries, sets]);
+  }, [entries, sets, settings.countSecretRares]);
 
   if (entries === undefined) {
     return (
@@ -258,7 +258,8 @@ export function DashboardView() {
                           </span>
                           {c.secret > 0 && (
                             <span className="mt-1 block text-xs">
-                              <span className="font-semibold text-fg">+{c.secret}</span> secret rare{c.secret === 1 ? "" : "s"}
+                              {c.includesSecret ? "incl. " : ""}
+                              <span className="font-semibold text-fg">{c.includesSecret ? c.secret : `+${c.secret}`}</span> secret rare{c.secret === 1 ? "" : "s"}
                             </span>
                           )}
                         </span>

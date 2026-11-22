@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { getSeries, getSets } from "@/lib/api-client";
 import { setCompletion } from "@/lib/collection";
-import { useEntries } from "@/lib/db";
+import { useEntries, useSettings } from "@/lib/db";
 import { langOf, splitId } from "@/lib/lang";
 import type { CollectionEntry } from "@/lib/types";
 import { CardTile, QtyBadge } from "./CardTile";
@@ -18,6 +18,7 @@ export function SerieBinderView({ serieId }: { serieId: string }) {
     return { serie: series.find((s) => s.id === serieId), sets: sets.filter((s) => s.serieId === serieId) };
   }, `${langOf(serieId)}:${serieId}`);
   const entries = useEntries();
+  const includeSecret = useSettings().countSecretRares !== false;
 
   const bySet = useMemo(() => {
     const m = new Map<string, CollectionEntry[]>();
@@ -76,7 +77,7 @@ export function SerieBinderView({ serieId }: { serieId: string }) {
         <div className="flex flex-col gap-8">
           {ownedSets.map((s) => {
             const list = bySet.get(s.id)!;
-            const c = setCompletion(list, s);
+            const c = setCompletion(list, s, { includeSecret });
             const byCard = new Map<string, { e: CollectionEntry; n: number }>();
             list.forEach((e) => {
               const cur = byCard.get(e.cardId);

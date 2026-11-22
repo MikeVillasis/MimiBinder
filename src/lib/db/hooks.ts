@@ -31,5 +31,7 @@ export function useBinders(): Binder[] | undefined {
 /** Settings with defaults applied; returns defaults until loaded. */
 export function useSettings(): Settings {
   const row = useLiveQuery(() => db.settings.get(SETTINGS_KEY), []);
-  return row ? { currency: row.currency, priceSource: row.priceSource } : DEFAULT_SETTINGS;
+  return row
+    ? { currency: row.currency, priceSource: row.priceSource, countSecretRares: row.countSecretRares ?? DEFAULT_SETTINGS.countSecretRares }
+    : DEFAULT_SETTINGS;
 }
