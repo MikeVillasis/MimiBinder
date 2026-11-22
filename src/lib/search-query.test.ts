@@ -27,6 +27,18 @@ describe("parseCardQuery", () => {
   });
 });
 
+describe("rarity codes", () => {
+  it("are taken out of the name", () => {
+    expect(parseCardQuery("Espeon ex SAR 211/187")).toEqual({
+      name: "Espeon ex",
+      number: { key: "211", prefix: "", num: 211, total: 187 },
+      rarity: "SAR",
+    });
+    expect(parseCardQuery("charizard ex sir").name).toBe("charizard ex");
+    expect(parseCardQuery("ar")).toEqual({ name: "ar" }); // a lone word is still a name search
+  });
+});
+
 describe("matchesCardNumber", () => {
   const n = (q: string) => parseCardQuery(q).number!;
   it("ignores zero padding and case", () => {

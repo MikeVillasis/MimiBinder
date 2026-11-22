@@ -1,4 +1,5 @@
 // Pure normalisers: raw TCGdex / Bank of Canada JSON → shared domain types.
+import { jaCdnImage } from "./ja-cdn-images";
 import type {
   CardDetail,
   CardmarketPrice,
@@ -80,7 +81,10 @@ export function normalizeCardSummary(raw: RawCardBrief, lang: Lang = "en"): Card
     id: joinId(raw.id, lang),
     localId: raw.localId,
     name: raw.name,
-    image: cardImageBase(raw.image),
+    image:
+      cardImageBase(raw.image) ??
+      // Japanese cards whose image is on TCGdex's CDN but not in the API (see ./ja-cdn-images.ts).
+      (lang === "ja" ? jaCdnImage(raw.id.slice(0, raw.id.length - raw.localId.length - 1), raw.localId) : undefined),
   };
 }
 
