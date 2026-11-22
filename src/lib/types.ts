@@ -2,6 +2,15 @@
 // sync layer and UI. Change it only with the lead's approval.
 
 export type Currency = "CAD" | "USD";
+
+/**
+ * Card language. English ids are TCGdex ids as-is ("sv03.5-001"); Japanese ids carry a "ja:" prefix
+ * ("ja:SV2a-001") on cards, sets and series alike, so every id-keyed store (entries, card cache,
+ * price snapshots, sync) works unchanged. Use the helpers in ./lang.ts; never parse ids by hand.
+ */
+export type Lang = "en" | "ja";
+
+export const LANG_LABELS: Record<Lang, string> = { en: "English", ja: "Japanese" };
 export type PriceSource = "tcgplayer" | "cardmarket";
 
 /** Printing variant of a card. Maps to TCGdex `variants` flags. */

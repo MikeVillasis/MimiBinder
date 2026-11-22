@@ -3,6 +3,7 @@ import type {
   CardDetail,
   CardSummary,
   FxRate,
+  Lang,
   PriceSnapshot,
   Serie,
   SetDetail,
@@ -44,8 +45,10 @@ async function get<T>(path: string, init?: RequestInit): Promise<T> {
 export function searchCards(
   q: string,
   page = 1,
+  lang: Lang = "en",
 ): Promise<{ cards: CardSummary[]; page: number; hasMore: boolean }> {
   const params = new URLSearchParams({ q, page: String(page) });
+  if (lang !== "en") params.set("lang", lang);
   return get(`/api/cards?${params}`);
 }
 
@@ -68,16 +71,17 @@ export async function getCardsBatch(ids: string[]): Promise<CardDetail[]> {
   return results.flatMap((r) => r.cards);
 }
 
-export async function getSets(): Promise<SetSummary[]> {
-  return (await get<{ sets: SetSummary[] }>("/api/sets")).sets;
+/** Sets of one language, newest first. Ids of Japanese sets carry the "ja:" prefix. */
+export async function getSets(lang: Lang = "en"): Promise<SetSummary[]> {
+  return (await get<{ sets: SetSummary[] }>(lang === "en" ? "/api/sets" : `/api/sets?lang=${lang}`)).sets;
 }
 
 export function getSet(id: string): Promise<SetDetail> {
   return get(`/api/sets/${encodeURIComponent(id)}`);
 }
 
-export async function getSeries(): Promise<Serie[]> {
-  return (await get<{ series: Serie[] }>("/api/series")).series;
+export async function getSeries(lang: Lang = "en"): Promise<Serie[]> {
+  return (await get<{ series: Serie[] }>(lang === "en" ? "/api/series" : `/api/series?lang=${lang}`)).series;
 }
 
 export function getFx(): Promise<FxRate> {
