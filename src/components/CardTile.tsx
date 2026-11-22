@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { CardImage } from "./CardImage";
 import { langOf } from "@/lib/lang";
+import { HoloCard, NewBadge } from "./fun";
 import { cardHref } from "./hooks";
 import { LangBadge, cx } from "./ui";
 
@@ -14,6 +15,8 @@ import { LangBadge, cx } from "./ui";
  * - `meta`: appended to the "#number" line ("#199 · Holo · NM").
  * - `action`: a small control (e.g. an edit icon button) to the right of the meta block.
  * - `footer`: anything else under the meta.
+ * - `index`: position in its grid; the first tiles are "dealt in" with a short stagger.
+ * - `isNew`: shows a "New" badge (added in the last few days).
  */
 export function CardTile({
   id,
@@ -26,6 +29,8 @@ export function CardTile({
   meta,
   action,
   footer,
+  index,
+  isNew,
 }: {
   id: string;
   name: string;
@@ -37,19 +42,28 @@ export function CardTile({
   meta?: ReactNode;
   action?: ReactNode;
   footer?: ReactNode;
+  index?: number;
+  isNew?: boolean;
 }) {
   const sub = [localId ? `#${localId}` : null, meta].filter(Boolean);
   return (
-    <div className="group min-w-0">
+    <div className={cx("group min-w-0", index != null && "deal")} style={index != null ? ({ "--deal-i": index } as CSSProperties) : undefined}>
       <Link
         href={cardHref(id)}
         className="ui-motion ui-press ui-lift relative block rounded-[6%/4.5%] focus-visible:outline-offset-4"
-        aria-label={`${name}${localId ? ` #${localId}` : ""}`}
+        aria-label={`${name}${localId ? ` #${localId}` : ""}${isNew ? ", new" : ""}`}
       >
-        <CardImage image={image} name={name} dim={dim} className="card-shadow" />
-        {badge && <span className="absolute right-1.5 top-1.5">{badge}</span>}
-        {langOf(id) === "ja" && <LangBadge className="absolute left-1.5 top-1.5" />}
-        {price && <span className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-0.75rem)]">{price}</span>}
+        <HoloCard>
+          <CardImage image={image} name={name} dim={dim} className="card-shadow" />
+          {badge && <span className="absolute right-1.5 top-1.5 z-[1]">{badge}</span>}
+          {(isNew || langOf(id) === "ja") && (
+            <span className="absolute left-1.5 top-1.5 z-[1] flex items-center gap-1">
+              {langOf(id) === "ja" && <LangBadge />}
+              {isNew && <NewBadge />}
+            </span>
+          )}
+          {price && <span className="absolute bottom-1.5 left-1.5 z-[1] max-w-[calc(100%-0.75rem)]">{price}</span>}
+        </HoloCard>
       </Link>
       <div className={cx("mt-2 flex min-w-0 items-start gap-1", action ? "pl-0.5" : "px-0.5")}>
         <div className="min-w-0 flex-1">

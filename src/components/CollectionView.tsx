@@ -8,7 +8,9 @@ import { printingKey, printingLabel } from "@/lib/stamps";
 import { matchesCardNumber, parseCardQuery } from "@/lib/search-query";
 import { useCollectionPrices } from "@/lib/useCollectionPrices";
 import { CONDITION_LABELS, VARIANT_LABELS, type CollectionEntry, type Condition, type Variant } from "@/lib/types";
+import { isNewEntry } from "@/lib/fun";
 import { CardImage } from "./CardImage";
+import { CardFan, InspectHint } from "./fun";
 import { CardTile, PriceChip, QtyBadge } from "./CardTile";
 import { EntryEditor } from "./EntryEditor";
 import { cardHref, entryCost, entryValue, localIdNum, useMoney } from "./hooks";
@@ -25,6 +27,7 @@ export function CollectionView() {
   const fx = pricedFx ?? fetchedFx;
 
   const [view, setView] = useState<View>("grid");
+  const [now] = useState(() => Date.now()); // for the "New" badge; fixed for this visit
   // ?sort=value|recent|… (links from Home) read after mount, like CenteringTool, so the page prerenders statically.
   const search = useSyncExternalStore(noopSubscribe, () => window.location.search, () => "");
   const urlSort = new URLSearchParams(search).get("sort");
@@ -89,7 +92,7 @@ export function CollectionView() {
     return (
       <>
         <PageHeader title="Collection" />
-        <EmptyState title="Your collection is empty" body="Search for a card and add it to start tracking value.">
+        <EmptyState art={<CardFan />} title="No cards in hand yet" body="Search for a card you own and add it. It lands here with its value, ready to sort and filter.">
           <Link href="/search" className={buttonCls()}>
             Search cards
           </Link>
@@ -244,6 +247,7 @@ export function CollectionView() {
         </div>
       </Sheet>
 
+      <InspectHint className="mt-4" />
       {filtered.length === 0 ? (
         <EmptyState title="No matches" body="No cards match this search and these filters.">
           <Button variant="secondary" onClick={clearAll}>
@@ -252,9 +256,11 @@ export function CollectionView() {
         </EmptyState>
       ) : view === "grid" ? (
         <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 md:grid-cols-4 md:gap-x-4 lg:grid-cols-6">
-          {filtered.map(({ e, value }) => (
+          {filtered.map(({ e, value }, i) => (
             <CardTile
               key={e.id}
+              index={i}
+              isNew={isNewEntry(e.createdAt, now)}
               id={e.cardId}
               name={e.cardName}
               localId={e.localId}

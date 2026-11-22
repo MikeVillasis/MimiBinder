@@ -255,22 +255,29 @@ export function EmptyState({
   title,
   body,
   icon,
+  art,
   children,
 }: {
   title: string;
   body?: ReactNode;
   /** Replaces the default app mark inside the soft circle. */
   icon?: ReactNode;
+  /** Replaces the soft circle altogether with a larger illustration (e.g. a <CardFan />). */
+  art?: ReactNode;
   children?: ReactNode;
 }) {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center gap-3 px-6 py-12 text-center">
-      <span className="mb-1 flex h-16 w-16 items-center justify-center rounded-full bg-surface-2 text-muted elev-0" aria-hidden="true">
-        {icon ?? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src="/icons/icon.svg" alt="" className="h-8 w-8 rounded-md opacity-60" />
-        )}
-      </span>
+      {art ? (
+        <span className="mb-3 flex justify-center">{art}</span>
+      ) : (
+        <span className="mb-1 flex h-16 w-16 items-center justify-center rounded-full bg-surface-2 text-muted elev-0" aria-hidden="true">
+          {icon ?? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src="/icons/icon.svg" alt="" className="h-8 w-8 rounded-md opacity-60" />
+          )}
+        </span>
+      )}
       <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
       {body && <p className="text-sm leading-relaxed text-muted">{body}</p>}
       {children && <div className="mt-2 flex flex-wrap justify-center gap-2">{children}</div>}
@@ -630,7 +637,16 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 export const inputCls =
   "ui-motion min-h-11 w-full rounded-ui-md border border-muted/45 bg-surface-2 px-3.5 text-base text-fg placeholder:text-muted hover:border-muted/70 focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent/20 md:text-sm";
 
-export function ProgressBar({ percent, label }: { percent: number; label?: string }) {
+export function ProgressBar({
+  percent,
+  label,
+  ticks,
+}: {
+  percent: number;
+  label?: string;
+  /** Quiet marks at these percents (e.g. the 25/50/75 set milestones). */
+  ticks?: readonly number[];
+}) {
   const p = Math.max(0, Math.min(100, percent));
   return (
     <div
@@ -639,13 +655,53 @@ export function ProgressBar({ percent, label }: { percent: number; label?: strin
       aria-valuemin={0}
       aria-valuemax={100}
       aria-label={label ?? "Completion"}
-      className="h-1.5 w-full overflow-hidden rounded-full bg-surface-3/80 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-line)_40%,transparent)]"
+      className="relative h-1.5 w-full overflow-hidden rounded-full bg-surface-3/80 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-line)_40%,transparent)]"
     >
       <div
         className="h-full rounded-full"
         style={{ width: `${p}%`, minWidth: p > 0 ? 6 : 0, background: p >= 100 ? "var(--color-good)" : "var(--color-accent)" }}
       />
+      {ticks?.map((t) => (
+        <span key={t} aria-hidden="true" className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-bg/70" style={{ left: `${t}%` }} />
+      ))}
     </div>
+  );
+}
+
+/** An on/off switch row control: 44px hit area, neutral track, accent when on. */
+export function Switch({
+  checked,
+  onChange,
+  label,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className="group relative inline-flex h-11 w-[52px] shrink-0 items-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <span
+        className={cx(
+          "ui-motion relative block h-[30px] w-[52px] rounded-full shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-line)_60%,transparent)]",
+          checked ? "bg-accent" : "bg-surface-3",
+        )}
+      >
+        <span
+          className={cx("switch-thumb absolute left-[3px] top-[3px] block h-6 w-6 rounded-full shadow-[var(--shadow-1)]", checked ? "bg-accent-fg" : "bg-muted")}
+          style={{ transform: checked ? "translateX(22px)" : "none" }}
+        />
+      </span>
+    </button>
   );
 }
 

@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { getSets } from "@/lib/api-client";
 import { groupBySet, setCompletion } from "@/lib/collection";
 import { useEntries } from "@/lib/db";
 import { langOf, splitId } from "@/lib/lang";
 import { useCollectionPrices } from "@/lib/useCollectionPrices";
 import { printingLabel } from "@/lib/stamps";
+import { isNewEntry } from "@/lib/fun";
 import { CardImage } from "./CardImage";
+import { CardFan, CountUp, HoloCard, InspectHint, NewBadge } from "./fun";
 import { cardHref, entryCost, entryValue, useAsync, useMoney } from "./hooks";
 import { EmptyState, LangBadge, ListGroup, ListRow, PageHeader, SectionHeader, SetLogo, Skeleton, Stat, Surface, buttonCls, cx } from "./ui";
 
@@ -17,6 +19,7 @@ export function DashboardView() {
   const { cards, fx: pricedFx, loading } = useCollectionPrices();
   const { settings, fx: fetchedFx, fmtDisplay } = useMoney();
   const fx = pricedFx ?? fetchedFx;
+  const [now] = useState(() => Date.now()); // for the "New" badge; fixed for this visit
   const hasJa = (entries ?? []).some((e) => langOf(e.cardId) === "ja");
   const { data: sets } = useAsync(
     async () => {
@@ -79,7 +82,11 @@ export function DashboardView() {
     return (
       <>
         <PageHeader title="Welcome to MimiBinder" subtitle="Track your Pokémon TCG collection and what it is worth." />
-        <EmptyState title="Start your collection" body="Search for a card you own, add it, and your total value, gains and set progress show up here.">
+        <EmptyState
+          art={<CardFan />}
+          title="Deal yourself in"
+          body="Search for a card you own and add it. Your total value, gains and set progress will show up right here."
+        >
           <Link href="/search" className={buttonCls({ size: "lg" })}>
             Search for a card
           </Link>
@@ -106,7 +113,14 @@ export function DashboardView() {
           <div className="relative flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="min-w-0">
               {priceReady ? (
-                <Stat inset size="lg" tone="accent" label="Total value" value={fmtDisplay(stats.value)} />
+                <Stat
+                  inset
+                  size="lg"
+                  tone="accent"
+                  label="Total value"
+                  // Counts up, then renders exactly fmtDisplay(stats.value); screen readers get that from the start.
+                  value={<CountUp id={`home-total:${settings.currency}`} value={stats.value} format={fmtDisplay} />}
+                />
               ) : (
                 <div>
                   <div className="text-[13px] font-medium text-muted">Total value</div>
@@ -147,6 +161,8 @@ export function DashboardView() {
           </div>
         </Surface>
 
+        <InspectHint className="-my-3" />
+
         {stats.recent.length > 0 && (
           <section aria-labelledby="recent-h">
             <SectionHeader id="recent-h" title="Recently added" href="/collection?sort=recent" />
@@ -154,12 +170,21 @@ export function DashboardView() {
               role="list"
               className="no-scrollbar -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-3 pt-1 md:-mx-1 md:scroll-px-1 md:gap-4 md:px-1"
             >
-              {stats.recent.map(({ e, v }) => (
-                <li key={e.id} className="w-[7.5rem] shrink-0 snap-start md:w-36">
-                  <Link href={cardHref(e.cardId)} className="group block rounded-xl focus-visible:outline-offset-4" aria-label={e.cardName}>
+              {stats.recent.map(({ e, v }, i) => {
+                const fresh = isNewEntry(e.createdAt, now);
+                return (
+                <li key={e.id} className="deal w-[7.5rem] shrink-0 snap-start md:w-36" style={{ "--deal-i": i } as CSSProperties}>
+                  <Link href={cardHref(e.cardId)} className="group block rounded-xl focus-visible:outline-offset-4" aria-label={fresh ? `${e.cardName}, new` : e.cardName}>
                     <div className="ui-motion ui-press ui-lift relative rounded-[6%/4.5%]">
-                      <CardImage image={e.image} name={e.cardName} className="card-shadow" />
-                      {langOf(e.cardId) === "ja" && <LangBadge className="absolute left-1.5 top-1.5" />}
+                      <HoloCard>
+                        <CardImage image={e.image} name={e.cardName} className="card-shadow" />
+                        {(fresh || langOf(e.cardId) === "ja") && (
+                          <span className="absolute left-1.5 top-1.5 z-[1] flex items-center gap-1">
+                            {langOf(e.cardId) === "ja" && <LangBadge />}
+                            {fresh && <NewBadge />}
+                          </span>
+                        )}
+                      </HoloCard>
                     </div>
                     <div className="mt-2 truncate px-0.5 text-[13px] font-semibold">{e.cardName}</div>
                     <div className="truncate px-0.5 text-xs text-muted tabular-nums">
@@ -167,7 +192,8 @@ export function DashboardView() {
                     </div>
                   </Link>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </section>
         )}

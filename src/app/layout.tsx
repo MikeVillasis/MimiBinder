@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/AppShell";
+import { FEEL_BOOT_SCRIPT } from "@/lib/fun";
 import { THEME_BOOT_SCRIPT } from "@/lib/themes/registry";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -24,10 +25,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    // suppressHydrationWarning: the boot script sets data-theme before React hydrates.
+    // suppressHydrationWarning: the boot scripts set data-theme / data-motion before React hydrates.
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: FEEL_BOOT_SCRIPT }} />
       </head>
       <body className="min-h-full">
         <AppShell>{children}</AppShell>

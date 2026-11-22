@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { cardImage } from "@/lib/pricing";
+import { haptic } from "@/lib/prefs";
 import { openCardInspector } from "./CardInspector";
 
 const HOLD_MS = 450;
@@ -16,20 +17,30 @@ function useHoldToInspect(enabled: boolean, image: string | undefined, name: str
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const start = useRef<{ x: number; y: number; id: number; type: string; t: number } | null>(null);
   const fired = useRef(false);
+  // The element being held: it carries data-holding, which draws the "charging" ring (globals.css).
+  const held = useRef<HTMLElement | null>(null);
 
   useEffect(() => () => clearTimeout(timer.current), []);
+
+  const ring = (el: HTMLElement | null) => {
+    held.current?.removeAttribute("data-holding");
+    held.current = el;
+    el?.setAttribute("data-holding", "");
+  };
 
   const cancel = () => {
     clearTimeout(timer.current);
     timer.current = undefined;
     start.current = null;
+    ring(null);
   };
 
   const fire = () => {
     clearTimeout(timer.current);
     timer.current = undefined;
     fired.current = true;
-    navigator.vibrate?.(10);
+    ring(null);
+    haptic("tick");
     openCardInspector({ image, name });
   };
 
@@ -42,6 +53,7 @@ function useHoldToInspect(enabled: boolean, image: string | undefined, name: str
       cancel();
       start.current = { x: e.clientX, y: e.clientY, id: e.pointerId, type: e.pointerType, t: performance.now() };
       timer.current = setTimeout(fire, HOLD_MS);
+      ring(e.currentTarget);
     },
     onPointerMove: (e: ReactPointerEvent<HTMLElement>) => {
       const s = start.current;

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { removeBinder, updateBinder, updateEntry, useBinders, useEntries } from "@/lib/db";
 import { printingLabel } from "@/lib/stamps";
 import { CardImage } from "./CardImage";
+import { CardFan } from "./fun";
 import { CardTile, QtyBadge } from "./CardTile";
 import { Button, CardGridSkeleton, ConfirmDialog, EmptyState, Field, ListGroup, PageHeader, Sheet, buttonCls, cx, inputCls } from "./ui";
 
@@ -86,16 +87,17 @@ export function CustomBinderView({ id }: { id: string }) {
       />
 
       {inBinder.length === 0 ? (
-        <EmptyState title="This binder is empty" body="Add cards from your collection.">
+        <EmptyState art={<CardFan />} title="Empty sleeves" body="This binder is waiting for its first cards. Pick some from your collection.">
           <Button variant="secondary" onClick={() => setAdding(true)} icon={<PlusIcon />}>
             Add cards
           </Button>
         </EmptyState>
       ) : (
         <div className="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 md:grid-cols-4 md:gap-x-4 lg:grid-cols-6">
-          {inBinder.map((e) => (
+          {inBinder.map((e, i) => (
             <CardTile
               key={e.id}
+              index={i}
               id={e.cardId}
               name={e.cardName}
               image={e.image}

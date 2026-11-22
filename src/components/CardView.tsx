@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { hasInAppHistory } from "./navHistory";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getCard } from "@/lib/api-client";
 import { getCachedCards, putCachedCards, useEntries } from "@/lib/db";
 import { langOf } from "@/lib/lang";
@@ -11,7 +11,11 @@ import type { CardDetail, Variant } from "@/lib/types";
 import { CONDITION_LABELS, VARIANT_LABELS } from "@/lib/types";
 import { printingKey, printingLabel } from "@/lib/stamps";
 import { AddToCollectionSheet } from "./AddToCollectionSheet";
+import { foilTier } from "@/lib/fun";
+import { haptic, motionOK } from "@/lib/prefs";
+import { CardBack } from "./CardBack";
 import { CardImage } from "./CardImage";
+import { HoloCard, Sparkles } from "./fun";
 import { openCardInspector } from "./CardInspector";
 import { PriceHistoryChart } from "./PriceHistoryChart";
 import { PriceTable } from "./PriceTable";
@@ -72,6 +76,18 @@ export function CardView({ id }: { id: string }) {
   const [adding, setAdding] = useState(false);
   const [zoom, setZoom] = useState(false);
   const [added, setAdded] = useState(false);
+  // "Added!" reveal: one turn of the big card with a sheen and sparkles. Purely visual; it runs
+  // after addEntry has resolved and is skipped under reduced motion / Settings > Feel.
+  const [revealing, setRevealing] = useState(false);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(revealTimer.current), []);
+  const celebrate = () => {
+    haptic("success");
+    if (!motionOK()) return;
+    clearTimeout(revealTimer.current);
+    setRevealing(true);
+    revealTimer.current = setTimeout(() => setRevealing(false), 1300);
+  };
   const [editing, setEditing] = useState<string>();
   const { settings, fmt } = useMoney();
 
@@ -115,9 +131,26 @@ export function CardView({ id }: { id: string }) {
       </Link>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[320px_minmax(0,1fr)] md:items-start md:gap-8">
         <div className="mx-auto w-full max-w-[264px] md:sticky md:top-8 md:max-w-none">
-          <button type="button" onClick={() => setZoom(true)} aria-label={`Zoom ${card.name}`} className="block w-full cursor-zoom-in rounded-[6%/4.5%]">
-            <CardImage image={card.image} name={card.name} quality="high" className="card-shadow" />
-          </button>
+          <div className="reveal-stage">
+            <div className="reveal-card" data-reveal={revealing ? "" : undefined}>
+              <button type="button" onClick={() => setZoom(true)} aria-label={`Zoom ${card.name}`} className="reveal-front block w-full cursor-zoom-in rounded-[6%/4.5%]">
+                <HoloCard tier={foilTier(card.rarity)} maxTilt={10} sweep>
+                  <CardImage image={card.image} name={card.name} quality="high" className="card-shadow" />
+                </HoloCard>
+                {revealing && (
+                  <span className="holo-fx" aria-hidden="true">
+                    <span className="holo-sweep" />
+                  </span>
+                )}
+              </button>
+              {revealing && (
+                <div className="reveal-back card-shadow" aria-hidden="true">
+                  <CardBack />
+                </div>
+              )}
+            </div>
+            {revealing && <Sparkles count={14} spread={150} />}
+          </div>
           <div className="mt-4 flex items-center justify-center gap-2">
             <Button variant="secondary" size="sm" pill icon={<InspectIcon />} className="elev-0" onClick={() => openCardInspector({ image: card.image, name: card.name })}>
               Inspect
@@ -229,6 +262,7 @@ export function CardView({ id }: { id: string }) {
           open={adding}
           onClose={() => setAdding(false)}
           onAdded={() => {
+            celebrate();
             setAdded(true);
             setTimeout(() => setAdded(false), 4000);
           }}

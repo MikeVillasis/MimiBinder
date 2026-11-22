@@ -6,7 +6,8 @@ import { THEMES, setTheme, useTheme, type ThemeMeta } from "@/lib/themes";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useAuth, useSync, verifyEmailCode } from "@/lib/sync";
 import type { Currency, PriceSource } from "@/lib/types";
-import { Button, ConfirmDialog, PageHeader, Segmented, SectionHeader, Surface, inputCls } from "./ui";
+import { haptic, PREF, useHapticsSupported, usePref, usePrefersReducedMotion, writePref } from "@/lib/prefs";
+import { Button, ConfirmDialog, PageHeader, Segmented, SectionHeader, Surface, Switch, inputCls } from "./ui";
 
 /** An iOS-style grouped section: a title, one Surface whose rows are divided by hairlines, a muted footnote. */
 function Group({ title, footer, children }: { title: string; footer?: ReactNode; children: ReactNode }) {
@@ -46,6 +47,7 @@ export function SettingsView() {
         <PageHeader title="Settings" />
       </div>
       <ThemeCard />
+      <FeelCard />
       <Group title="Prices" footer="All prices are converted to your currency using Bank of Canada rates. TCGPlayer is in USD, Cardmarket is in EUR.">
         <Row label="Currency">
           <Segmented<Currency>
@@ -115,6 +117,35 @@ export function SettingsView() {
         </div>
       </section>
     </div>
+  );
+}
+
+/** Per-device switches for the playful layer: card shine and motion, and haptics. */
+function FeelCard() {
+  const motionOn = usePref(PREF.motion, "on") !== "off";
+  const hapticsOn = usePref(PREF.haptics, "on") !== "off";
+  const reduced = usePrefersReducedMotion();
+  const canVibrate = useHapticsSupported();
+  return (
+    <Group title="Feel" footer="These only change how the app moves and feels on this device. Prices and your collection are never affected.">
+      <Row
+        label="Card shine and motion"
+        hint={reduced ? "Off: your device asks for reduced motion" : "Tilt and light on cards, dealt-in grids, the add reveal and the total counting up"}
+      >
+        <Switch label="Card shine and motion" checked={motionOn && !reduced} disabled={reduced} onChange={(on) => writePref(PREF.motion, on ? null : "off")} />
+      </Row>
+      <Row label="Haptics" hint={canVibrate ? "A light tap when you hold a card, add one or reach a set milestone" : "This device or browser does not support vibration"}>
+        <Switch
+          label="Haptics"
+          checked={hapticsOn && canVibrate}
+          disabled={!canVibrate}
+          onChange={(on) => {
+            writePref(PREF.haptics, on ? null : "off");
+            if (on) haptic("tick");
+          }}
+        />
+      </Row>
+    </Group>
   );
 }
 

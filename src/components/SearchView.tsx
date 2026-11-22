@@ -7,6 +7,7 @@ import { searchCards } from "@/lib/api-client";
 import { parseLang } from "@/lib/lang";
 import { LANG_LABELS, type CardSummary, type Lang } from "@/lib/types";
 import { CardTile } from "./CardTile";
+import { InspectHint } from "./fun";
 import { Button, CardGridSkeleton, EmptyState, ErrorState, PageHeader, Segmented, buttonCls, inputCls } from "./ui";
 
 export function SearchView() {
@@ -131,7 +132,7 @@ export function SearchView() {
 
       {!q && (
         <EmptyState
-          title="Find a card"
+          title="What are we looking for?"
           icon={
             <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="11" cy="11" r="7" />
@@ -163,9 +164,10 @@ export function SearchView() {
 
       {shown.length > 0 && (
         <>
+          <InspectHint className="mb-3 mt-2" />
           <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            {shown.map((c) => (
-              <CardTile key={c.id} id={c.id} name={c.name} localId={c.localId} image={c.image} />
+            {shown.map((c, i) => (
+              <CardTile key={c.id} index={i % 24} id={c.id} name={c.name} localId={c.localId} image={c.image} />
             ))}
           </div>
           {hasMore && (

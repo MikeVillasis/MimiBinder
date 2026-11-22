@@ -6,11 +6,17 @@ import { getSet } from "@/lib/api-client";
 import { setCompletion } from "@/lib/collection";
 import { useEntries } from "@/lib/db";
 import { langOf, splitId } from "@/lib/lang";
+import { MILESTONES } from "@/lib/fun";
+import { PREF, usePref, writePref } from "@/lib/prefs";
+import { BinderPages } from "./BinderPages";
 import { CardTile, QtyBadge } from "./CardTile";
+import { InspectHint, MilestoneBanner, useMilestone } from "./fun";
 import { useAsync } from "./hooks";
 import { CardGridSkeleton, ErrorState, ProgressBar, Segmented, SetLogo, Skeleton, Stat, Surface } from "./ui";
 
 type Show = "all" | "owned" | "missing";
+type View = "grid" | "pages";
+const TICKS = MILESTONES.filter((m) => m < 100);
 
 export function SetBinderView({ setId }: { setId: string }) {
   const { data: set, error, loading, retry } = useAsync(() => getSet(setId), `${langOf(setId)}:${setId}`);
@@ -23,6 +29,12 @@ export function SetBinderView({ setId }: { setId: string }) {
     mine.forEach((e) => m.set(e.cardId, (m.get(e.cardId) ?? 0) + e.quantity));
     return m;
   }, [mine]);
+  // Remembered on this device. The grid stays the default.
+  const view: View = usePref(PREF.setView, "grid") === "pages" ? "pages" : "grid";
+  // Milestones read the existing setCompletion result; nothing is recomputed. Wait for both the set
+  // and the collection, so a half-loaded 0% never counts.
+  const completion = useMemo(() => (set ? setCompletion(mine, set) : null), [mine, set]);
+  const { milestone, dismiss } = useMilestone(setId, !!completion && entries !== undefined, completion?.percent ?? 0);
 
   if (loading)
     return (
@@ -31,9 +43,21 @@ export function SetBinderView({ setId }: { setId: string }) {
         <CardGridSkeleton count={18} />
       </div>
     );
-  if (error || !set) return <ErrorState message={error ?? "Set not found."} onRetry={retry} />;
+  if (error || !set || !completion) return <ErrorState message={error ?? "Set not found."} onRetry={retry} />;
 
-  const c = setCompletion(mine, set);
+  const c = completion;
+  const tile = (card: (typeof set.cards)[number], index: number) => (
+    <CardTile
+      key={card.id}
+      index={index}
+      id={card.id}
+      name={card.name}
+      localId={card.localId}
+      image={card.image}
+      dim={!qty.has(card.id)}
+      badge={qty.has(card.id) ? <QtyBadge n={qty.get(card.id)!} /> : undefined}
+    />
+  );
   const cards = set.cards.filter((card) => (show === "all" ? true : show === "owned" ? qty.has(card.id) : !qty.has(card.id)));
 
   return (
@@ -56,13 +80,22 @@ export function SetBinderView({ setId }: { setId: string }) {
             </p>
           </div>
         </div>
-        <Segmented<Show>
-          label="Show"
-          value={show}
-          onChange={setShow}
-          options={[{ value: "all", label: "All" }, { value: "owned", label: "Owned" }, { value: "missing", label: "Missing" }]}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented<View>
+            label="View"
+            value={view}
+            onChange={(v) => writePref(PREF.setView, v)}
+            options={[{ value: "grid", label: "Grid" }, { value: "pages", label: "Pages" }]}
+          />
+          <Segmented<Show>
+            label="Show"
+            value={show}
+            onChange={setShow}
+            options={[{ value: "all", label: "All" }, { value: "owned", label: "Owned" }, { value: "missing", label: "Missing" }]}
+          />
+        </div>
       </div>
+      {milestone != null && <MilestoneBanner milestone={milestone} setName={set.name} onDismiss={dismiss} />}
       <Surface as="section" aria-label="Completion" padded className="mb-5">
         <div className="mb-3 flex items-end justify-between gap-3">
           <Stat inset label="Completion" value={`${Math.round(c.percent)}%`} size="lg" tone={c.percent >= 100 ? "good" : undefined} />
@@ -70,26 +103,30 @@ export function SetBinderView({ setId }: { setId: string }) {
             <span className="text-base font-semibold text-fg">{c.owned}</span> / {c.total} cards
           </div>
         </div>
-        <ProgressBar percent={c.percent} label={`${set.name} completion`} />
+        <ProgressBar percent={c.percent} label={`${set.name} completion`} ticks={TICKS} />
         {c.secret > 0 && (
           <p className="mt-3 text-[13px] text-muted">
             +{c.secret} secret rare{c.secret === 1 ? "" : "s"} owned, not counted toward completion
           </p>
         )}
       </Surface>
-      <div className="grid grid-cols-3 gap-x-2.5 gap-y-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7">
-        {cards.map((card) => (
-          <CardTile
-            key={card.id}
-            id={card.id}
-            name={card.name}
-            localId={card.localId}
-            image={card.image}
-            dim={!qty.has(card.id)}
-            badge={qty.has(card.id) ? <QtyBadge n={qty.get(card.id)!} /> : undefined}
-          />
-        ))}
-      </div>
+      <InspectHint className="mb-4" />
+      {cards.length === 0 ? (
+        <p className="px-1 py-8 text-center text-sm text-muted">
+          {show === "owned" ? "You don't own any cards from this set yet." : show === "missing" ? "Nothing missing. Every card in this set is yours." : "This set has no cards listed yet."}
+        </p>
+      ) : view === "pages" ? (
+        <BinderPages
+          items={cards}
+          itemKey={(card) => card.id}
+          label={`${set.name} binder pages`}
+          renderPocket={(card, i) => tile(card, i % 9)}
+        />
+      ) : (
+        <div className="grid grid-cols-3 gap-x-2.5 gap-y-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7">
+          {cards.map((card, i) => tile(card, i))}
+        </div>
+      )}
     </div>
   );
 }

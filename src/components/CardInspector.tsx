@@ -22,7 +22,8 @@ import { CardBack } from "./CardBack";
 
 export type InspectCard = { image?: string; name: string };
 
-const OPEN_EVENT = "mimibinder:inspect-card";
+export const INSPECT_OPEN_EVENT = "mimibinder:inspect-card";
+const OPEN_EVENT = INSPECT_OPEN_EVENT;
 const MIN_SCALE = 0.6;
 const MAX_SCALE = 4;
 const DOUBLE_TAP_MS = 320;
