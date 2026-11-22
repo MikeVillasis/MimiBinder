@@ -137,7 +137,7 @@ export function AddToCollectionSheet({
                     onClick={() => setBinderIds((ids) => (on ? ids.filter((i) => i !== b.id) : [...ids, b.id]))}
                     className={cx(
                       "min-h-11 rounded-full border px-4 text-sm font-medium",
-                      on ? "border-accent bg-accent/20 text-accent" : "border-line bg-surface-2 text-muted",
+                      on ? "border-accent bg-accent/20 text-accent" : "border-muted/75 bg-surface-2 text-muted",
                     )}
                   >
                     {b.name}

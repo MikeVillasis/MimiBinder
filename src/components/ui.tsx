@@ -96,7 +96,7 @@ export function Segmented<T extends string>({
   label: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-xl border border-line bg-surface p-1">
+    <div role="radiogroup" aria-label={label} className="inline-flex rounded-xl border border-muted/75 bg-surface p-1">
       {options.map((o) => (
         <button
           key={o.value}
@@ -222,7 +222,7 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 }
 
 export const inputCls =
-  "min-h-11 w-full rounded-xl border border-line bg-surface-2 px-3 text-base text-fg placeholder:text-muted focus:border-accent focus:outline-none md:text-sm";
+  "min-h-11 w-full rounded-xl border border-muted/75 bg-surface-2 px-3 text-base text-fg placeholder:text-muted focus:border-accent focus:outline-none md:text-sm";
 
 export function ProgressBar({ percent, label }: { percent: number; label?: string }) {
   const p = Math.max(0, Math.min(100, percent));
@@ -237,7 +237,7 @@ export function ProgressBar({ percent, label }: { percent: number; label?: strin
     >
       <div
         className="h-full rounded-full"
-        style={{ width: `${p}%`, background: p >= 100 ? "var(--color-good)" : "linear-gradient(90deg,#ef4444,#ffcb05)" }}
+        style={{ width: `${p}%`, background: p >= 100 ? "var(--color-good)" : "linear-gradient(90deg, var(--color-brand), var(--color-accent))" }}
       />
     </div>
   );

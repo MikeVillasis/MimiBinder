@@ -84,7 +84,7 @@ export function DashboardView() {
       <PageHeader title="Home" subtitle={`Prices in ${settings.currency} · ${settings.priceSource === "tcgplayer" ? "TCGPlayer" : "Cardmarket"}`} />
 
       <section aria-label="Summary" className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <div className="col-span-2 rounded-2xl border border-accent/30 p-4" style={{ background: "linear-gradient(135deg, rgb(255 203 5 / 0.14), rgb(239 68 68 / 0.08))" }}>
+        <div className="col-span-2 rounded-2xl border border-accent/30 p-4" style={{ background: "linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 14%, transparent), color-mix(in srgb, var(--color-brand) 8%, transparent))" }}>
           <div className="text-xs font-medium uppercase tracking-wide text-muted">Total value</div>
           {priceReady ? (
             <div className="mt-1 text-4xl font-extrabold tabular-nums text-accent">{fmtDisplay(stats.value)}</div>

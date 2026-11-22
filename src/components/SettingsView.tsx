@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import { exportCollection, importCollection, updateSettings, useSettings } from "@/lib/db";
+import { THEMES, setTheme, useTheme, type ThemeMeta } from "@/lib/themes";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useAuth, useSync, verifyEmailCode } from "@/lib/sync";
 import type { Currency, PriceSource } from "@/lib/types";
@@ -23,6 +24,7 @@ export function SettingsView() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <PageHeader title="Settings" />
+      <ThemeCard />
       <Card title="Currency" desc="All prices are converted to this currency using Bank of Canada rates.">
         <Segmented<Currency>
           label="Currency"
@@ -63,6 +65,17 @@ export function SettingsView() {
             advice.
           </p>
           <p>
+            Theme art credits:{" "}
+            {THEMES.filter((t) => t.credit).map((t, i) => (
+              <span key={t.id}>
+                {i > 0 && "; "}
+                {t.name}: {creditText(t)}
+              </span>
+            ))}
+            . Themes are original designs inspired by the colours and drawing style of the credited cards; card artwork
+            belongs to its artists and The Pokemon Company.
+          </p>
+          <p>
             Open source under the MIT License ·{" "}
             <a className="text-accent underline" href="https://github.com/MikeVillasis/MimiBinder" target="_blank" rel="noreferrer">
               Source on GitHub
@@ -71,6 +84,62 @@ export function SettingsView() {
         </div>
       </Card>
     </div>
+  );
+}
+
+function creditText(t: ThemeMeta) {
+  const c = t.credit;
+  if (!c) return "";
+  return `Inspired by ${c.card} (${c.set} ${c.number}) · Illustrated by ${c.artist}`;
+}
+
+function ThemeCard() {
+  const current = useTheme();
+  return (
+    <Card title="Theme" desc="Pick a look for this device. Your choice is saved in this browser.">
+      <div role="group" aria-label="Theme" className="grid grid-cols-2 gap-3">
+        {THEMES.map((t) => {
+          const on = t.id === current.id;
+          const [bg, surface, accent, ...extras] = t.swatches;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => setTheme(t.id)}
+              className={`relative flex flex-col gap-2 rounded-2xl border bg-surface p-2.5 text-left transition ${
+                on ? "border-accent ring-2 ring-accent" : "border-muted/75 hover:border-accent/60"
+              }`}
+            >
+              <div className="flex h-20 flex-col justify-between rounded-xl p-2" style={{ background: bg }} aria-hidden="true">
+                <div className="flex items-center gap-1.5 rounded-lg p-1.5" style={{ background: surface }}>
+                  <span className="h-3.5 w-3.5 rounded-full" style={{ background: accent }} />
+                  <span className="h-1.5 flex-1 rounded-full opacity-40" style={{ background: extras[0] ?? accent }} />
+                </div>
+                <div className="flex gap-1.5">
+                  {extras.map((c, i) => (
+                    <span key={i} className="h-3 w-3 rounded-full border border-black/10" style={{ background: c }} />
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-bold">{t.name}</span>
+                <span className="text-[11px] font-medium uppercase tracking-wide text-muted">{t.mode}</span>
+              </div>
+              <p className="text-xs text-muted">{t.description}</p>
+              {t.credit && <p className="text-[11px] leading-snug text-muted">{creditText(t)}</p>}
+              {on && (
+                <span className="absolute right-2.5 top-2.5 flex h-6 w-6 items-center justify-center rounded-full bg-accent text-accent-fg" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                  </svg>
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { useSync } from "@/lib/sync";
 import { useTrackNavigation } from "./navHistory";
+import { ShaderBackground } from "./theme/ShaderBackground";
 
 const NAV = [
   { href: "/", label: "Home", icon: "M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" },
@@ -101,6 +102,7 @@ function SyncMount() {
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh md:pl-60">
+      <ShaderBackground />
       <SyncMount />
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col gap-6 border-r border-line bg-surface/80 p-4 backdrop-blur md:flex">
         <Link href="/" className="px-2 py-3" aria-label="MimiBinder home">

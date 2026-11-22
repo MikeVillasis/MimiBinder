@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
-@theme inline {
+/* Colour tokens: utilities read these as var(--color-*), so themes can override them
+   under [data-theme="..."] (see src/lib/themes). */
+@theme {
   --color-bg: #0a0c13;
   --color-surface: #131724;
   --color-surface-2: #1b2133;
@@ -12,12 +14,38 @@
   --color-brand: #ef4444;
   --color-good: #34d399;
   --color-danger: #fb7185;
+}
+
+@theme inline {
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 :root {
   color-scheme: dark;
+  --glow-1: rgb(255 203 5 / 0.07);
+  --glow-2: rgb(239 68 68 / 0.06);
+  --card-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.7);
+}
+
+/* "Spatial Rift" — inspired by Origin Forme Palkia V (Astral Radiance 167/189),
+   illustrated by Oswaldo KATO. Parchment, pewter and slate with an orchid accent. */
+:root[data-theme="palkia"] {
+  color-scheme: light;
+  --color-bg: #efe7dc;
+  --color-surface: rgb(250 246 240 / 0.84);
+  --color-surface-2: rgb(236 227 216 / 0.88);
+  --color-line: #c9bcb0;
+  --color-fg: #262c31;
+  --color-muted: #625953;
+  --color-accent: #9b4a86;
+  --color-accent-fg: #ffffff;
+  --color-brand: #2f4a68;
+  --color-good: #2f7352;
+  --color-danger: #a8323f;
+  --glow-1: rgb(155 74 134 / 0.08);
+  --glow-2: rgb(47 74 104 / 0.07);
+  --card-shadow: 0 10px 24px -12px rgb(60 48 40 / 0.45);
 }
 
 html {
@@ -27,8 +55,8 @@ html {
 
 body {
   background:
-    radial-gradient(900px 400px at 85% -10%, rgb(255 203 5 / 0.07), transparent 60%),
-    radial-gradient(700px 400px at -10% 0%, rgb(239 68 68 / 0.06), transparent 60%),
+    radial-gradient(900px 400px at 85% -10%, var(--glow-1), transparent 60%),
+    radial-gradient(700px 400px at -10% 0%, var(--glow-2), transparent 60%),
     var(--color-bg);
   background-attachment: fixed;
   color: var(--color-fg);
@@ -57,4 +85,4 @@ body {
 }
 .sheet-anim { animation: pv-sheet-up 0.18s ease-out; }
 
-.card-shadow { box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.7); }
+.card-shadow { box-shadow: var(--card-shadow); }

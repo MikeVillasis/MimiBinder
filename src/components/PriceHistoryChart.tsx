@@ -109,20 +109,20 @@ export function PriceHistoryChart({ card }: { card: CardDetail }) {
         <div className="h-52 w-full md:h-64">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid stroke="#262d44" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="date" tick={{ fill: "#8f98b3", fontSize: 11 }} tickFormatter={(d: string) => d.slice(5)} minTickGap={24} stroke="#262d44" />
+              <CartesianGrid stroke="var(--color-line)" strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="date" tick={{ fill: "var(--color-muted)", fontSize: 11 }} tickFormatter={(d: string) => d.slice(5)} minTickGap={24} stroke="var(--color-line)" />
               <YAxis
                 width={52}
-                tick={{ fill: "#8f98b3", fontSize: 11 }}
+                tick={{ fill: "var(--color-muted)", fontSize: 11 }}
                 domain={["auto", "auto"]}
                 tickFormatter={(v: number) => fmt(v, settings.currency)}
-                stroke="#262d44"
+                stroke="var(--color-line)"
               />
               <Tooltip
-                contentStyle={{ background: "#131724", border: "1px solid #262d44", borderRadius: 12, color: "#eef0f7" }}
+                contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-line)", borderRadius: 12, color: "var(--color-fg)" }}
                 formatter={(v) => [fmt(Number(v), settings.currency), "Price"]}
               />
-              <Line type="monotone" dataKey="value" stroke="#ffcb05" strokeWidth={2.5} dot={points.length < 30 ? { r: points.length < 3 ? 4 : 3 } : false} connectNulls />
+              <Line type="monotone" dataKey="value" stroke="var(--color-accent)" strokeWidth={2.5} dot={points.length < 30 ? { r: points.length < 3 ? 4 : 3 } : false} connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </div>
