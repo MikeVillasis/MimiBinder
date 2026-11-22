@@ -1,6 +1,7 @@
 import type { ShaderDef } from "./types";
 import { palkia } from "./palkia";
 import { giratina } from "./giratina";
+import { ceruledge } from "./ceruledge";
 
 export type { ShaderDef };
 
@@ -8,4 +9,5 @@ export type { ShaderDef };
 export const SHADERS: Record<string, ShaderDef | undefined> = {
   palkia,
   giratina,
+  ceruledge,
 };

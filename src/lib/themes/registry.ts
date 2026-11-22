@@ -56,6 +56,16 @@ export const THEMES: ThemeMeta[] = [
     shader: true,
     credit: { card: "Giratina VSTAR", set: "Crown Zenith", number: "GG69/GG70", artist: "Akira Egawa" },
   },
+  {
+    id: "ceruledge",
+    name: "Raging Amethyst",
+    mode: "dark",
+    description: "Indigo night with amethyst and ice-blue crystal shards, swirling violet ink and prismatic sparks.",
+    themeColor: "#0e0b1a",
+    swatches: ["#0e0b1a", "#1a152a", "#c8a2ff", "#3fbfd8", "#d175a7"],
+    shader: true,
+    credit: { card: "Ceruledge ex", set: "Prismatic Evolutions", number: "147/131", artist: "akagi" },
+  },
 ];
 
 export const DEFAULT_THEME = "default";

@@ -101,6 +101,33 @@
   --shadow-pop: 0 28px 70px -14px rgb(0 0 0 / 0.8), 0 6px 18px -6px rgb(0 0 0 / 0.45);
 }
 
+/* "Raging Amethyst" — inspired by Ceruledge ex (Prismatic Evolutions 147/131), illustrated by akagi.
+   Indigo-black void, light amethyst accent, ice-cyan crystal as the second colour. */
+:root[data-theme="ceruledge"] {
+  color-scheme: dark;
+  --color-bg: #0e0b1a;
+  --color-surface: rgb(26 21 42 / 0.84);
+  --color-surface-2: rgb(38 31 58 / 0.88);
+  --color-line: #3a3152;
+  --color-fg: #f3f1f6;
+  --color-muted: #b4aac8;
+  --color-accent: #c8a2ff;
+  --color-accent-fg: #1b1030;
+  --color-brand: #3fbfd8;
+  --color-good: #5fd4a0;
+  --color-danger: #ff8fa3;
+  --glow-1: rgb(200 162 255 / 0.08);
+  --glow-2: rgb(63 191 216 / 0.06);
+  --card-shadow: 0 10px 26px -10px rgb(0 0 0 / 0.75);
+  --color-surface-3: rgb(58 48 86 / 0.94);
+  --color-accent-soft: rgb(200 162 255 / 0.15);
+  --hairline: inset 0 1px 0 rgb(230 220 255 / 0.06);
+  --edge: 0 0 0 1px color-mix(in srgb, var(--color-line) 60%, transparent);
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.35), 0 4px 14px -6px rgb(0 0 0 / 0.5);
+  --shadow-2: 0 2px 4px rgb(0 0 0 / 0.3), 0 16px 36px -12px rgb(0 0 0 / 0.7);
+  --shadow-pop: 0 28px 70px -14px rgb(0 0 0 / 0.8), 0 6px 18px -6px rgb(0 0 0 / 0.45);
+}
+
 html {
   background: var(--color-bg);
   -webkit-tap-highlight-color: transparent;
