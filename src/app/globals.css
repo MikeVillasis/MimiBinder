@@ -14,6 +14,16 @@
   --color-brand: #ef4444;
   --color-good: #34d399;
   --color-danger: #fb7185;
+  /* Refresh: the raised layer (segment thumb, popovers) and the accent tint for selection. */
+  --color-surface-3: #272f45;
+  --color-accent-soft: rgb(255 203 5 / 0.14);
+
+  /* Component radii (DESIGN.md --radius-sm/md/lg/xl). Namespaced "ui-" so Tailwind's own
+     rounded-sm…3xl scale, used across the screens, keeps its sizes: rounded-ui-lg etc. */
+  --radius-ui-sm: 10px;
+  --radius-ui-md: 14px;
+  --radius-ui-lg: 20px;
+  --radius-ui-xl: 28px;
 }
 
 @theme inline {
@@ -26,6 +36,14 @@
   --glow-1: rgb(255 203 5 / 0.07);
   --glow-2: rgb(239 68 68 / 0.06);
   --card-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.7);
+  /* Elevation (plain custom properties, not @theme, so themes can override them; Tailwind inlines
+     @theme shadows into its utilities). Use the elev-* utilities below. */
+  --hairline: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --edge: 0 0 0 1px color-mix(in srgb, var(--color-line) 55%, transparent);
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 14px -6px rgb(0 0 0 / 0.45);
+  --shadow-2: 0 2px 4px rgb(0 0 0 / 0.28), 0 16px 36px -12px rgb(0 0 0 / 0.65);
+  --shadow-pop: 0 28px 70px -14px rgb(0 0 0 / 0.75), 0 6px 18px -6px rgb(0 0 0 / 0.4);
+  --ease-out-ui: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* "Spatial Rift" — inspired by Origin Forme Palkia V (Astral Radiance 167/189),
@@ -38,7 +56,7 @@
   --color-line: #c9bcb0;
   --color-fg: #262c31;
   --color-muted: #625953;
-  --color-accent: #9b4a86;
+  --color-accent: #904279; /* was #9b4a86; darkened for AA on accent-soft */
   --color-accent-fg: #ffffff;
   --color-brand: #2f4a68;
   --color-good: #2f7352;
@@ -46,6 +64,14 @@
   --glow-1: rgb(155 74 134 / 0.08);
   --glow-2: rgb(47 74 104 / 0.07);
   --card-shadow: 0 10px 24px -12px rgb(60 48 40 / 0.45);
+  --color-surface-3: rgb(255 253 250 / 0.94);
+  --color-accent-soft: rgb(144 66 121 / 0.12);
+  /* Light theme: warm, softer shadows and a bright white top highlight. */
+  --hairline: inset 0 1px 0 rgb(255 255 255 / 0.75);
+  --edge: 0 0 0 1px color-mix(in srgb, var(--color-line) 60%, transparent);
+  --shadow-1: 0 1px 2px rgb(74 52 36 / 0.06), 0 3px 12px -4px rgb(74 52 36 / 0.12);
+  --shadow-2: 0 2px 4px rgb(74 52 36 / 0.06), 0 14px 32px -10px rgb(74 52 36 / 0.22);
+  --shadow-pop: 0 26px 64px -16px rgb(60 42 28 / 0.32), 0 4px 14px -4px rgb(60 42 28 / 0.1);
 }
 
 /* "Star Requiem" — inspired by Giratina VSTAR (Crown Zenith GG69/GG70), illustrated by
@@ -66,6 +92,13 @@
   --glow-1: rgb(229 181 73 / 0.07);
   --glow-2: rgb(168 52 63 / 0.06);
   --card-shadow: 0 10px 26px -10px rgb(0 0 0 / 0.75);
+  --color-surface-3: rgb(80 54 34 / 0.94);
+  --color-accent-soft: rgb(229 181 73 / 0.15);
+  --hairline: inset 0 1px 0 rgb(255 236 210 / 0.06);
+  --edge: 0 0 0 1px color-mix(in srgb, var(--color-line) 60%, transparent);
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.35), 0 4px 14px -6px rgb(0 0 0 / 0.5);
+  --shadow-2: 0 2px 4px rgb(0 0 0 / 0.3), 0 16px 36px -12px rgb(0 0 0 / 0.7);
+  --shadow-pop: 0 28px 70px -14px rgb(0 0 0 / 0.8), 0 6px 18px -6px rgb(0 0 0 / 0.45);
 }
 
 html {
@@ -82,6 +115,13 @@ body {
   color: var(--color-fg);
   font-family: var(--font-sans);
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
 :focus-visible {
@@ -106,3 +146,76 @@ body {
 .sheet-anim { animation: pv-sheet-up 0.18s ease-out; }
 
 .card-shadow { box-shadow: var(--card-shadow); }
+
+/* Elevation: hairline top highlight + low-contrast edge + soft shadow. Utilities, so hover:/md: work. */
+@utility elev-0 {
+  box-shadow: var(--hairline), var(--edge);
+}
+@utility elev-1 {
+  box-shadow: var(--hairline), var(--edge), var(--shadow-1);
+}
+@utility elev-2 {
+  box-shadow: var(--hairline), var(--edge), var(--shadow-2);
+}
+@utility elev-pop {
+  box-shadow: var(--hairline), var(--edge), var(--shadow-pop);
+}
+
+/* Gentle motion (DESIGN.md §7): 150–200 ms ease-out, press = scale(.98). */
+@utility ui-motion {
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 180ms;
+  transition-timing-function: var(--ease-out-ui);
+}
+@utility ui-press {
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+}
+@utility ui-lift {
+  @media (hover: hover) {
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--hairline), var(--edge), var(--shadow-2);
+    }
+  }
+}
+.seg-thumb {
+  transition:
+    transform 200ms var(--ease-out-ui),
+    width 200ms var(--ease-out-ui);
+}
+/* ListRow: hairline divider between rows, inset to line up with the text. */
+.list-row {
+  position: relative;
+}
+.list-row + .list-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 1rem;
+  right: 0;
+  height: 1px;
+  background: color-mix(in srgb, var(--color-line) 70%, transparent);
+  pointer-events: none;
+}
+/* Horizontal chip rows scroll without a visible bar. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-motion,
+  .seg-thumb,
+  .sheet-anim {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+  .ui-press:active,
+  .ui-lift:hover {
+    transform: none !important;
+  }
+}

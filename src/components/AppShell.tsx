@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Suspense, type ReactNode } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { useSync } from "@/lib/sync";
 import { CardInspector } from "./CardInspector";
 import { useTrackNavigation } from "./navHistory";
@@ -45,7 +45,7 @@ function Logo() {
 
 function SideNav({ path }: { path: string }) {
   return (
-    <nav aria-label="Main" className="flex flex-col gap-1">
+    <nav aria-label="Main" className="flex flex-col gap-0.5">
       {SIDE_NAV.map((n) => {
         const active = isActive(path, n.href);
         return (
@@ -53,8 +53,8 @@ function SideNav({ path }: { path: string }) {
             key={n.href}
             href={n.href}
             aria-current={active ? "page" : undefined}
-            className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors ${
-              active ? "bg-accent text-accent-fg" : "text-muted hover:bg-surface-2 hover:text-fg"
+            className={`ui-motion flex min-h-11 items-center gap-3 rounded-ui-sm px-3 text-sm ${
+              active ? "bg-accent-soft font-semibold text-accent" : "font-medium text-muted hover:bg-surface-2 hover:text-fg"
             }`}
           >
             <Icon d={n.icon} />
@@ -68,7 +68,7 @@ function SideNav({ path }: { path: string }) {
 
 function BottomNav({ path }: { path: string }) {
   return (
-    <ul className="grid grid-cols-5">
+    <ul className="mx-auto grid max-w-lg grid-cols-5 px-1">
       {NAV.map((n) => {
         const active = isActive(path, n.href);
         return (
@@ -76,17 +76,44 @@ function BottomNav({ path }: { path: string }) {
             <Link
               href={n.href}
               aria-current={active ? "page" : undefined}
-              className={`flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs font-medium ${
-                active ? "text-accent" : "text-muted"
+              className={`ui-press flex min-h-[3.5rem] flex-col items-center justify-center gap-0.5 pt-1.5 pb-1 text-xs ${
+                active ? "font-semibold text-accent" : "font-medium text-muted"
               }`}
             >
-              <Icon d={n.icon} />
+              <span
+                className={`ui-motion flex h-7 w-14 items-center justify-center rounded-full ${active ? "bg-accent-soft" : ""}`}
+                aria-hidden="true"
+              >
+                <Icon d={n.icon} />
+              </span>
               {n.label}
             </Link>
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/** Phone top bar: transparent over the page top, blurred surface + hairline once content scrolls under it. */
+function TopBar() {
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 4);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  return (
+    <header
+      className={`ui-motion sticky top-0 z-20 flex min-h-12 items-center border-b px-4 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] backdrop-blur-xl backdrop-saturate-150 md:hidden ${
+        scrolled ? "border-line/60 bg-bg/75" : "border-transparent bg-bg/0"
+      }`}
+    >
+      <Link href="/" aria-label="MimiBinder home" className="-my-1 flex min-h-11 items-center">
+        <Logo />
+      </Link>
+    </header>
   );
 }
 
@@ -110,8 +137,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <ShaderBackground />
       <SyncMount />
       <CardInspector />
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col gap-6 border-r border-line bg-surface/80 p-4 backdrop-blur md:flex">
-        <Link href="/" className="px-2 py-3" aria-label="MimiBinder home">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col gap-5 border-r border-line/60 bg-surface/80 p-3 backdrop-blur-xl md:flex">
+        <Link href="/" className="rounded-ui-sm px-3 py-4" aria-label="MimiBinder home">
           <Logo />
         </Link>
         <Suspense fallback={<SideNav path="" />}>
@@ -119,22 +146,18 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Suspense>
       </aside>
 
-      <header className="sticky top-0 z-20 flex items-center border-b border-line bg-bg/85 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] backdrop-blur md:hidden">
-        <Link href="/" aria-label="MimiBinder home">
-          <Logo />
-        </Link>
-      </header>
+      <TopBar />
 
-      <main className="mx-auto w-full max-w-6xl px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-4 md:px-8 md:pb-12 md:pt-8">
+      <main className="mx-auto w-full max-w-6xl px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-2 md:px-8 md:pb-12 md:pt-10">
         {/* Route params and other runtime data stream in under this boundary (Cache Components). */}
-        <Suspense fallback={<div className="h-40 animate-pulse rounded-2xl bg-surface" aria-busy="true" />}>
+        <Suspense fallback={<div className="h-40 animate-pulse rounded-ui-lg bg-surface" aria-busy="true" />}>
           {children}
         </Suspense>
       </main>
 
       <nav
         aria-label="Main"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-line/60 bg-surface/75 pb-[env(safe-area-inset-bottom)] shadow-[var(--hairline)] backdrop-blur-xl backdrop-saturate-150 md:hidden"
       >
         <Suspense fallback={<BottomNav path="" />}>
           <ActiveBottomNav />
