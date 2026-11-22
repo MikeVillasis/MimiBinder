@@ -9,6 +9,7 @@ import type {
   Settings,
   Variant,
 } from "../types";
+import { assessmentSchema, type GradingAssessment } from "./assessments";
 import { db, DEFAULT_SETTINGS, nowIso, SETTINGS_KEY, type CachedCard } from "./database";
 
 // ---- Entries ------------------------------------------------------------------------
@@ -230,6 +231,8 @@ const exportSchema = z.object({
   version: z.literal(1),
   entries: z.array(entrySchema).default([]),
   binders: z.array(binderSchema).default([]),
+  // Added with saved grading assessments. Absent in older backups, which then leave local assessments alone.
+  assessments: z.array(assessmentSchema).optional(),
   settings: z
     .object({
       currency: z.enum(["CAD", "USD"]),
@@ -241,15 +244,19 @@ const exportSchema = z.object({
 
 export type CollectionExport = z.infer<typeof exportSchema>;
 
-/** JSON backup of live (non-deleted) entries and binders plus settings. */
+/**
+ * JSON backup of live (non-deleted) entries and binders plus settings and saved grading assessments.
+ * Still `version: 1`: `assessments` is an extra key that older app versions simply ignore.
+ */
 export async function exportCollection(): Promise<string> {
-  const [entries, binders, settings] = await Promise.all([
+  const [entries, binders, settings, assessments] = await Promise.all([
     db.entries.filter((e) => !e.deletedAt).toArray(),
     db.binders.filter((b) => !b.deletedAt).toArray(),
     getSettings(),
+    db.assessments.toArray(),
   ]);
   return JSON.stringify(
-    { version: 1, exportedAt: new Date().toISOString(), entries, binders, settings },
+    { version: 1, exportedAt: new Date().toISOString(), entries, binders, settings, assessments },
     null,
     2,
   );
@@ -268,12 +275,16 @@ export class ImportError extends Error {
  * - replace: every local row not in the file is tombstoned (so deletions sync); every
  *   imported row is written with a fresh updatedAt so it wins on the next sync. Settings
  *   from the file are applied.
- * Returns the number of entries / binders written. Throws ImportError on invalid input.
+ * - Saved grading assessments (local only) follow the same idea: merge keeps the newer row; replace makes the
+ *   local set equal to the file's. A backup made before assessments existed has no `assessments` key and
+ *   leaves the local ones untouched in both modes.
+ * Returns the number of entries / binders written, plus `assessments` when the file contained any.
+ * Throws ImportError on invalid input.
  */
 export async function importCollection(
   json: string,
   mode: "merge" | "replace",
-): Promise<{ entries: number; binders: number }> {
+): Promise<{ entries: number; binders: number; assessments?: number }> {
   let raw: unknown;
   try {
     raw = JSON.parse(json);
@@ -290,12 +301,20 @@ export async function importCollection(
   const data = parsed.data;
   const entries = data.entries.map((e) => stripUndefined(e) as CollectionEntry);
   const binders = data.binders.map((b) => stripUndefined(b) as Binder);
+  const assessments = data.assessments?.map((a) => stripUndefined(a) as GradingAssessment);
 
   if (mode === "merge") {
-    return db.transaction("rw", db.entries, db.binders, () => applyLww(entries, binders));
+    return db.transaction("rw", db.entries, db.binders, db.assessments, async () => {
+      const done = await applyLww(entries, binders);
+      if (!assessments?.length) return done;
+      const local = await db.assessments.bulkGet(assessments.map((a) => a.id));
+      const write = assessments.filter((a, i) => !local[i] || a.updatedAt > local[i]!.updatedAt);
+      await db.assessments.bulkPut(write);
+      return { ...done, assessments: write.length };
+    });
   }
 
-  return db.transaction("rw", db.entries, db.binders, db.settings, async () => {
+  return db.transaction("rw", db.entries, db.binders, db.settings, db.assessments, async () => {
     const entryIds = new Set(entries.map((e) => e.id));
     const binderIds = new Set(binders.map((b) => b.id));
     const now = nowIso();
@@ -317,7 +336,11 @@ export async function importCollection(
       const current = await getSettings();
       await db.settings.put({ key: SETTINGS_KEY, ...current, ...stripUndefined(data.settings) });
     }
-    return { entries: entries.length, binders: binders.length };
+    if (assessments) {
+      await db.assessments.clear();
+      await db.assessments.bulkPut(assessments);
+    }
+    return { entries: entries.length, binders: binders.length, ...(assessments?.length ? { assessments: assessments.length } : {}) };
   });
 }
 

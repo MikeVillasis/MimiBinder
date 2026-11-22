@@ -2,6 +2,7 @@
 // server (it only opens IndexedDB lazily on first query), but never query it there.
 import { Dexie, type EntityTable } from "dexie";
 import type { Binder, CardDetail, CollectionEntry, Settings } from "../types";
+import type { GradingAssessment } from "./assessments";
 
 export const SETTINGS_KEY = "settings";
 
@@ -20,6 +21,8 @@ export class MimiBinderDB extends Dexie {
   binders!: EntityTable<Binder, "id">;
   settings!: EntityTable<SettingsRow, "key">;
   cardCache!: EntityTable<CachedCard, "id">;
+  /** Saved grading assessments (centering tool). Local only: never synced. Added in schema version 2. */
+  assessments!: EntityTable<GradingAssessment, "id">;
 
   constructor(name = "mimibinder") {
     super(name);
@@ -28,6 +31,10 @@ export class MimiBinderDB extends Dexie {
       binders: "id, updatedAt",
       settings: "key",
       cardCache: "id, cachedAt",
+    });
+    // v2 only adds a table, so existing rows need no migration (Dexie keeps unlisted tables as they are).
+    this.version(2).stores({
+      assessments: "id, cardId, entryId, createdAt, updatedAt",
     });
   }
 }

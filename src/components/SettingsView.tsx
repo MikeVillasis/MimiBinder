@@ -402,7 +402,7 @@ function DataCard() {
         onConfirm={async () => {
           try {
             const r = await importCollection(pending!, mode);
-            setMsg({ ok: true, text: `Imported ${r.entries} entries and ${r.binders} binders.` });
+            setMsg({ ok: true, text: `Imported ${r.entries} entries and ${r.binders} binders${r.assessments ? `, plus ${r.assessments} saved grading ${r.assessments === 1 ? "check" : "checks"}` : ""}.` });
           } catch (e) {
             setMsg({ ok: false, text: e instanceof Error ? e.message : "Import failed." });
           }
