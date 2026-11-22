@@ -44,7 +44,7 @@ function Accuracy({ rows }: { rows: GradingAssessment[] }) {
         {s.probableChecked > 0 && (
           <li>
             Probable ceiling held for {s.probableHeld} of {s.probableChecked}; PSA landed exactly on it {s.probableExact} {s.probableExact === 1 ? "time" : "times"}
-            {s.meanGap != null ? ` and on average ${Math.abs(s.meanGap).toFixed(1)} ${s.meanGap >= 0 ? "below" : "above"} it` : ""}.
+            {s.meanGap != null && Math.abs(s.meanGap) >= 0.05 ? ` and on average ${Math.abs(s.meanGap).toFixed(1)} ${s.meanGap > 0 ? "below" : "above"} it` : ""}.
           </li>
         )}
         {s.graded < 10 && <li>Too few cards to draw conclusions yet.</li>}

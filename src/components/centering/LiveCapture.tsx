@@ -162,7 +162,7 @@ function Overlay({ face, onClose, onPhoto, onFallback }: { face: Face; onClose: 
 
   return (
     <div role="dialog" aria-modal="true" aria-label={`Guided camera, ${face} of the card`} className="fixed inset-0 z-[60] flex flex-col bg-black text-white">
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         <video ref={videoRef} playsInline muted autoPlay onLoadedData={() => setReady(true)} className="absolute inset-0 h-full w-full object-contain" aria-hidden="true" />
         {/* Card-shaped guide (63:88), as large as fits with a margin. */}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6" aria-hidden="true">

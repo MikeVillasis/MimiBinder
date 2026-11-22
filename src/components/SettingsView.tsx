@@ -341,7 +341,7 @@ function DataCard() {
   return (
     <>
     <Group title="Your data" footer="Export a JSON backup or import one from another device.">
-      <Row label="Export backup" hint="Download your collection as JSON">
+      <Row label="Export backup" hint="Download your collection and grading log as JSON">
         <Button variant="secondary" size="sm" onClick={doExport}>
           Export JSON
         </Button>

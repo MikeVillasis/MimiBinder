@@ -41,7 +41,7 @@ function Marks({ crop }: { crop: EvidenceCrop }) {
   if (!crop.marks.length) return null;
   const sw = Math.max(crop.w, crop.h) / 60;
   return (
-    <svg viewBox={`0 0 ${crop.w} ${crop.h}`} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+    <svg viewBox={`0 0 ${crop.w} ${crop.h}`} preserveAspectRatio="xMidYMid slice" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
       {crop.marks.map((line, i) => {
         const pts = line.map((p) => `${p.x},${p.y}`).join(" ");
         return (
@@ -77,12 +77,12 @@ function ZoneMap({ zones }: { zones: ZoneView[] }) {
   const by = new Map(zones.map((z) => [z.zone, z]));
   const fill = (id: ZoneId) => {
     const z = by.get(id);
-    if (!z || z.status === "notAssessed") return "var(--color-surface-3)";
+    if (!z || z.status === "notAssessed") return "var(--color-muted)";
     return z.status === "flagged" ? "var(--color-danger)" : "var(--color-good)";
   };
   const op = (id: ZoneId) => {
     const z = by.get(id);
-    return !z || z.status === "notAssessed" ? 1 : z.status === "flagged" ? 0.95 : z.checked.whitening && z.checked.contour ? 0.75 : 0.4;
+    return !z || z.status === "notAssessed" ? 0.3 : z.status === "flagged" ? 0.95 : z.checked.whitening && z.checked.contour ? 0.75 : 0.4;
   };
   const W = 63, H = 88, c = 9, t = 4;
   return (
@@ -153,7 +153,7 @@ export function ConditionPanel({
             <p className="font-medium">Not checked on this photo.</p>
           ) : s.flagged.length ? (
             <p className="font-semibold text-danger">
-              {s.flagged.length} of 8 {s.flagged.length === 1 ? "zone" : "zones"} flagged
+              {s.flagged.length} of 8 zones flagged
             </p>
           ) : (
             <p className="font-semibold text-good">No visible wear flagged</p>
@@ -166,7 +166,7 @@ export function ConditionPanel({
             <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted" aria-hidden="true">
               <li className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-danger" /> Flagged</li>
               <li className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-good" /> Clear</li>
-              <li className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-surface-3 ring-1 ring-line" /> Not checked</li>
+              <li className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-muted/30" /> Not checked</li>
             </ul>
           )}
         </div>
