@@ -45,13 +45,28 @@ export function effectiveSource(cardId: string, source: PriceSource): PriceSourc
  * - cardmarket: the "-holo" block for reverse (and for holo when the card also has a
  *   non-holo printing, i.e. the main block describes the non-holo card); otherwise the
  *   main block. Trend, falling back to avg.
+ * - with `stamp`: that stamped printing's own prices (`card.stamped`), market → mid on TCGPlayer,
+ *   trend → avg on Cardmarket; null when the printing or its price is missing.
  */
 export function unitPrice(
   card: CardDetail,
   variant: Variant,
   source: PriceSource,
+  stamp?: string,
 ): { amount: number; currency: SourceCurrency } | null {
-  if (effectiveSource(card.id, source) === "tcgplayer") {
+  const src = effectiveSource(card.id, source);
+  if (stamp) {
+    const printing = card.stamped?.find((p) => p.variant === variant && p.stamp === stamp);
+    if (!printing) return null;
+    if (src === "tcgplayer") {
+      const amount = printing.tcgplayer?.market ?? printing.tcgplayer?.mid ?? null;
+      return amount != null ? { amount, currency: "USD" } : null;
+    }
+    const amount = printing.cardmarket?.trend ?? printing.cardmarket?.avg ?? null;
+    return amount != null ? { amount, currency: "EUR" } : null;
+  }
+
+  if (src === "tcgplayer") {
     const p = card.prices.tcgplayer?.variants[variant];
     const amount = p?.market ?? p?.mid ?? null;
     return amount != null ? { amount, currency: "USD" } : null;

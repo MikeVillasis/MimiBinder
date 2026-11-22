@@ -309,3 +309,64 @@ export const jaPikachuCards: RawCardBrief[] = [
   { id: "M2-030", localId: "030", name: "ピカチュウex", image: "https://assets.tcgdex.net/ja/M/M2/030" },
   { id: "SV2a-025", localId: "025", name: "ピカチュウ", image: "https://assets.tcgdex.net/ja/SV/SV2a/025" },
 ];
+
+const zoruaCardmarket = {
+  updated: "2026-11-21T22:16:19.030Z",
+  unit: "EUR",
+  avg: 7.86,
+  low: 4.24,
+  trend: 7.75,
+  avg1: 7.7,
+  avg7: 8.09,
+  avg30: 7.83,
+  "avg-holo": null,
+  "low-holo": null,
+  "trend-holo": 0,
+  "avg1-holo": null,
+  "avg7-holo": null,
+  "avg30-holo": null,
+};
+const zoruaTcgplayer = {
+  unit: "USD",
+  updated: "2026-11-21T22:16:32.603Z",
+  holofoil: { lowPrice: 7.25, midPrice: 9.71, highPrice: 145.35, marketPrice: 8.99, directLowPrice: 12.82 },
+};
+
+/** svp-189 N's Zorua (captured 2026-11-22): a plain holo and a Pokémon Center stamped holo. */
+export const nsZorua: RawCard = {
+  id: "svp-189",
+  localId: "189",
+  name: "N's Zorua",
+  image: "https://assets.tcgdex.net/en/sv/svp/189",
+  rarity: "Promo",
+  illustrator: "Megumi Mizutani",
+  hp: 70,
+  types: ["Darkness"],
+  set: { cardCount: { official: 225, total: 226 }, id: "svp", name: "SVP Black Star Promos" },
+  variants: { firstEdition: false, holo: true, normal: false, reverse: false, wPromo: false },
+  pricing: { cardmarket: zoruaCardmarket, tcgplayer: zoruaTcgplayer },
+  variants_detailed: [
+    { type: "holo", size: "standard", pricing: { cardmarket: zoruaCardmarket, tcgplayer: zoruaTcgplayer } },
+    {
+      type: "holo",
+      size: "standard",
+      stamp: ["pokemon-center"],
+      pricing: {
+        cardmarket: {
+          ...zoruaCardmarket,
+          avg: 57,
+          low: 40,
+          trend: 71.71,
+          avg1: 53.9,
+          avg7: 62.1,
+          avg30: 82.55,
+        },
+        tcgplayer: {
+          unit: "USD",
+          updated: "2026-11-21T22:16:32.603Z",
+          holofoil: { lowPrice: 34.68, midPrice: 41.09, highPrice: 559.18, marketPrice: 38.17, directLowPrice: null },
+        },
+      },
+    },
+  ],
+};

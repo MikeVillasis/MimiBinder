@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cardImage, convert, effectiveSource, FALLBACK_FX, formatMoney, unitPrice } from "./pricing";
 import { normalizeCard } from "./tcgdex/normalize";
-import { baseCharizard, barePromo, bulbasaur, charizardEx, jaBulbasaur } from "./tcgdex/fixtures.test-data";
+import { baseCharizard, barePromo, bulbasaur, charizardEx, jaBulbasaur, nsZorua } from "./tcgdex/fixtures.test-data";
 import type { FxRate } from "./types";
 
 const fx: FxRate = { usdCad: 1.4, eurCad: 1.5, date: "2026-11-20" };
@@ -61,6 +61,47 @@ describe("unitPrice", () => {
     };
     expect(unitPrice(card, "normal", "cardmarket")).toEqual({ amount: 3, currency: "EUR" });
     expect(unitPrice(normalizeCard(barePromo), "normal", "cardmarket")).toBeNull();
+  });
+});
+
+describe("unitPrice with a stamp", () => {
+  const zorua = normalizeCard(nsZorua);
+
+  it("uses the stamped printing's prices; no stamp keeps the regular price", () => {
+    expect(unitPrice(zorua, "holo", "tcgplayer", "pokemon-center")).toEqual({ amount: 38.17, currency: "USD" });
+    expect(unitPrice(zorua, "holo", "cardmarket", "pokemon-center")).toEqual({ amount: 71.71, currency: "EUR" });
+    expect(unitPrice(zorua, "holo", "tcgplayer")).toEqual({ amount: 8.99, currency: "USD" });
+    expect(unitPrice(zorua, "holo", "tcgplayer", "")).toEqual({ amount: 8.99, currency: "USD" });
+  });
+
+  it("falls back to mid / avg", () => {
+    const card = {
+      ...zorua,
+      stamped: [
+        {
+          variant: "holo" as const,
+          stamp: "staff",
+          tcgplayer: { low: null, mid: 5, high: null, market: null },
+          cardmarket: { avg: 4, low: null, trend: null, avg7: null, avg30: null },
+        },
+      ],
+    };
+    expect(unitPrice(card, "holo", "tcgplayer", "staff")).toEqual({ amount: 5, currency: "USD" });
+    expect(unitPrice(card, "holo", "cardmarket", "staff")).toEqual({ amount: 4, currency: "EUR" });
+  });
+
+  it("null when the printing or its price is missing", () => {
+    expect(unitPrice(zorua, "holo", "tcgplayer", "staff")).toBeNull();
+    expect(unitPrice(zorua, "normal", "tcgplayer", "pokemon-center")).toBeNull();
+    expect(unitPrice(normalizeCard(bulbasaur), "normal", "tcgplayer", "pokemon-center")).toBeNull();
+    const noPrice = { ...zorua, stamped: [{ variant: "holo" as const, stamp: "pokemon-center" }] };
+    expect(unitPrice(noPrice, "holo", "tcgplayer", "pokemon-center")).toBeNull();
+    expect(unitPrice(noPrice, "holo", "cardmarket", "pokemon-center")).toBeNull();
+  });
+
+  it("Japanese stamped cards price from Cardmarket", () => {
+    const ja = normalizeCard({ ...nsZorua, id: "ja:SVP-189" }, undefined, "ja");
+    expect(unitPrice(ja, "holo", "tcgplayer", "pokemon-center")).toEqual({ amount: 71.71, currency: "EUR" });
   });
 });
 

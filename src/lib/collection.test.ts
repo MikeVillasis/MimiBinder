@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { collectionValue, groupBySerie, groupBySet, setCompletion, UNKNOWN_SERIE } from "./collection";
 import { normalizeCard } from "./tcgdex/normalize";
-import { bulbasaur, charizardEx } from "./tcgdex/fixtures.test-data";
+import { bulbasaur, charizardEx, nsZorua } from "./tcgdex/fixtures.test-data";
 import type { CardDetail, CollectionEntry, FxRate, SetSummary } from "./types";
 
 let n = 0;
@@ -93,7 +93,20 @@ describe("collectionValue", () => {
   const cards = new Map<string, CardDetail>([
     ["sv03.5-001", normalizeCard(bulbasaur)],
     ["sv03.5-199", normalizeCard(charizardEx)],
+    ["svp-189", normalizeCard(nsZorua)],
   ]);
+
+  it("prices stamped entries from their stamped printing", () => {
+    const es = [
+      entry({ cardId: "svp-189", variant: "holo", stamp: "pokemon-center" }),
+      entry({ cardId: "svp-189", variant: "holo" }),
+      entry({ cardId: "svp-189", variant: "holo", stamp: "staff" }), // no such printing
+    ];
+    const r = collectionValue(es, cards, { currency: "USD", priceSource: "tcgplayer" }, fx);
+    expect(r.value).toBeCloseTo(38.17 + 8.99, 2);
+    expect(r.priced).toBe(2);
+    expect(r.unpriced).toBe(1);
+  });
 
   it("sums value and cost in the display currency", () => {
     const es = [

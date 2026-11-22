@@ -80,7 +80,7 @@ export function collectionValue(
     if (!live(e)) continue;
     const qty = Math.max(0, e.quantity);
     const card = cards.get(e.cardId);
-    const p = card ? unitPrice(card, e.variant, settings.priceSource) : null;
+    const p = card ? unitPrice(card, e.variant, settings.priceSource, e.stamp) : null;
     if (p) {
       value += convert(p.amount, p.currency, settings.currency, fx) * qty;
       priced++;

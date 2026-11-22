@@ -52,6 +52,17 @@ export interface RawCardmarket {
   "avg30-holo"?: number | null;
 }
 
+/** One entry of TCGdex `variants_detailed` (a specific printing, possibly stamped or jumbo). */
+export interface RawVariantDetailed {
+  type?: string | null; // "normal" | "holo" | "reverse" | "lenticular" | "firstEdition" | …
+  size?: string | null; // "standard" | "jumbo"
+  stamp?: string[] | null;
+  pricing?: {
+    tcgplayer?: RawTcgplayer | null;
+    cardmarket?: RawCardmarket | null;
+  } | null;
+}
+
 export interface RawCard extends RawCardBrief {
   rarity?: string | null;
   illustrator?: string | null;
@@ -69,6 +80,7 @@ export interface RawCard extends RawCardBrief {
     tcgplayer?: RawTcgplayer | null;
     cardmarket?: RawCardmarket | null;
   } | null;
+  variants_detailed?: RawVariantDetailed[] | null;
 }
 
 export interface RawSet extends RawSetBrief {

@@ -8,9 +8,12 @@ import {
   buildSnapshotRows,
   groupTargets,
   mapWithConcurrency,
+  readSnapshotTargets,
+  upsertSnapshots,
   utcDate,
   withTimeout,
   type SnapshotRow,
+  type TargetRow,
 } from "@/lib/sync/snapshots";
 
 export const maxDuration = 300;
@@ -49,18 +52,15 @@ export async function GET(request: Request) {
   const started = Date.now();
   const date = utcDate(new Date(started));
 
-  // 1. Distinct (cardId, variant) across all live entries.
-  const targetRows: { card_id: string | null; variant: string | null }[] = [];
-  for (let from = 0; ; from += TARGET_PAGE) {
-    const { data, error } = await supabase
-      .rpc("snapshot_targets")
-      .range(from, from + TARGET_PAGE - 1);
-    if (error) {
-      return Response.json({ error: `Reading targets failed: ${error.message}` }, { status: 500 });
-    }
-    const page = (data ?? []) as { card_id: string | null; variant: string | null }[];
-    targetRows.push(...page);
-    if (page.length < TARGET_PAGE) break;
+  // 1. Distinct (cardId, variant, stamp) across all live entries. Before migration 0002 this falls
+  //    back to (cardId, variant), i.e. regular printings only (logged).
+  let targetRows: TargetRow[];
+  let schema: "stamped" | "legacy";
+  try {
+    ({ rows: targetRows, schema } = await readSnapshotTargets(supabase, { pageSize: TARGET_PAGE }));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return Response.json({ error: `Reading targets failed: ${message}` }, { status: 500 });
   }
   const targets = groupTargets(targetRows);
   const cardIds = [...targets.keys()];
@@ -90,16 +90,9 @@ export async function GET(request: Request) {
   });
 
   // 4. Upsert snapshots (idempotent per day: re-running overwrites today's rows).
-  let upserted = 0;
-  const writeErrors: string[] = [];
-  for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
-    const part = rows.slice(i, i + UPSERT_CHUNK);
-    const { error } = await supabase
-      .from("price_snapshots")
-      .upsert(part, { onConflict: "card_id,variant,date" });
-    if (error) writeErrors.push(error.message);
-    else upserted += part.length;
-  }
+  const written = await upsertSnapshots(supabase, rows, schema, { chunk: UPSERT_CHUNK });
+  const upserted = written.upserted;
+  const writeErrors = written.errors;
 
   // 5. FX rate for the same date.
   let fxSaved = false;
@@ -124,6 +117,7 @@ export async function GET(request: Request) {
     cards: cardIds.length,
     targets: targetRows.length,
     snapshots: upserted,
+    schema: written.schema,
     failed: failures.length,
     failedCardIds: failures.slice(0, 50),
     skipped,

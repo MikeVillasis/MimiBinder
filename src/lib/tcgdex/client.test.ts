@@ -295,3 +295,139 @@ describe("tcgdex client: Japanese", () => {
     expect(fn.mock.calls.some(([u]) => String(u).includes("/cards"))).toBe(false);
   });
 });
+
+describe("searchCards: card numbers", () => {
+  const cardsCalls = (fn: ReturnType<typeof mockFetch>, lang = "en") =>
+    fn.mock.calls
+      .map(([u]) => new URL(String(u)))
+      .filter((u) => u.pathname === `/v2/${lang}/cards`);
+
+  it("name + number: localId and name filters, exact matches only, Pocket dropped", async () => {
+    const fn = mockFetch(
+      tcgdexRoutes((url) =>
+        url.pathname === "/v2/en/cards"
+          ? [
+              { id: "svp-189", localId: "189", name: "N's Zorua" },
+              { id: "smp-SM189", localId: "SM189", name: "N's Zorua" }, // lax match, wrong prefix
+              { id: "x-1189", localId: "1189", name: "N's Zorua" },
+              { id: "A1-189", localId: "189", name: "N's Zorua" }, // TCG Pocket
+            ]
+          : undefined,
+      ),
+    );
+    const res = await searchCards("N's Zorua 189");
+    const [call] = cardsCalls(fn);
+    expect(call.searchParams.get("localId")).toBe("189");
+    expect(call.searchParams.get("name")).toBe("N's Zorua");
+    expect(call.searchParams.get("pagination:itemsPerPage")).toBe("250");
+    expect(cardsCalls(fn)).toHaveLength(1); // short first page → no more pages
+    expect(res).toEqual({ cards: [{ id: "svp-189", localId: "189", name: "N's Zorua", image: undefined }], page: 1, hasMore: false });
+  });
+
+  it("number/total ranks sets with that official count first, keeping the others", async () => {
+    const list = [
+      { id: "base1-189", localId: "189", name: "a" },
+      { id: "svp-189", localId: "189", name: "b" },
+      { id: "sv01-189", localId: "189", name: "c" },
+    ];
+    mockFetch(tcgdexRoutes((url) => (url.pathname === "/v2/en/cards" ? list : undefined)));
+    const withTotal = await searchCards("189/198");
+    expect(withTotal.cards.map((c) => c.id)).toEqual(["sv01-189", "svp-189", "base1-189"]);
+    const plain = await searchCards("#189");
+    // newest set first: SV serie (sv01 is listed after svp, so it is newer), then base
+    expect(plain.cards.map((c) => c.id)).toEqual(["sv01-189", "svp-189", "base1-189"]);
+    const promoTotal = await searchCards("189/225");
+    expect(promoTotal.cards.map((c) => c.id)).toEqual(["svp-189", "sv01-189", "base1-189"]);
+  });
+
+  it("number only: no name filter, caps pages, paginates locally at 24", async () => {
+    // Every page full: 60 exact "1"/"001" cards on page 1, the rest lax noise ("10", "21", "TG01").
+    const page = (pg: number) =>
+      Array.from({ length: 250 }, (_, i) => {
+        const exact = pg === 1 && i < 60;
+        const localId = exact ? (i % 2 ? "001" : "1") : ["10", "21", "TG01"][i % 3];
+        return { id: `s${pg}x${i}-${localId}`, localId, name: "x" };
+      });
+    const fn = mockFetch(
+      tcgdexRoutes((url) =>
+        url.pathname === "/v2/en/cards" ? page(Number(url.searchParams.get("pagination:page"))) : undefined,
+      ),
+    );
+    const p1 = await searchCards("1");
+    const calls = cardsCalls(fn);
+    expect(calls.map((c) => c.searchParams.get("pagination:page")).sort()).toEqual(["1", "2", "3", "4"]);
+    expect(calls.every((c) => c.searchParams.get("localId") === "1" && !c.searchParams.has("name"))).toBe(true);
+    expect(p1.cards).toHaveLength(24);
+    expect(p1.hasMore).toBe(true);
+    expect((await searchCards("1", 3)).cards).toHaveLength(12);
+    expect((await searchCards("1", 3)).hasMore).toBe(false);
+    expect((await searchCards("001", 3)).cards).toHaveLength(12);
+  });
+
+  it("a failing later page keeps the results of the others", async () => {
+    mockFetch(
+      tcgdexRoutes((url) => {
+        if (url.pathname !== "/v2/en/cards") return undefined;
+        const pg = url.searchParams.get("pagination:page");
+        if (pg === "2") return new Response("boom", { status: 500 });
+        return Array.from({ length: pg === "1" ? 250 : 3 }, (_, i) => ({ id: `p${pg}-${i}-5`, localId: "5", name: "x" }));
+      }),
+    );
+    expect((await searchCards("5", 11)).cards).toHaveLength(256 - 240);
+  });
+
+  it("prefixed numbers filter by prefix (TCGdex has no match for 'TG5') and match exactly", async () => {
+    const fn = mockFetch(
+      tcgdexRoutes((url) =>
+        url.pathname === "/v2/en/cards"
+          ? [
+              { id: "swsh9tg-TG05", localId: "TG05", name: "Pikachu" },
+              { id: "swsh10tg-TG15", localId: "TG15", name: "Pikachu" },
+              { id: "swsh11tg-TG05", localId: "TG05", name: "Pikachu VMAX" },
+              { id: "swsh12-5", localId: "5", name: "Pikachu" },
+            ]
+          : undefined,
+      ),
+    );
+    const res = await searchCards("pikachu tg05");
+    const [call] = cardsCalls(fn);
+    expect(call.searchParams.get("localId")).toBe("TG");
+    expect(call.searchParams.get("name")).toBe("pikachu");
+    expect(res.cards.map((c) => c.id)).toEqual(["swsh9tg-TG05", "swsh11tg-TG05"]);
+  });
+
+  it("ja + English name + number filters the species results", async () => {
+    const fn = mockFetch(
+      tcgdexRoutes((url) =>
+        url.pathname === "/v2/ja/cards" && url.searchParams.get("dexId") === "eq:25" ? jaPikachuCards : undefined,
+      ),
+    );
+    const res = await searchCards("pikachu 25", 1, "ja");
+    expect(res.cards.map((c) => c.id)).toEqual(["ja:SV2a-025"]);
+    expect(cardsCalls(fn, "ja").every((u) => !u.searchParams.has("localId"))).toBe(true);
+    expect((await searchCards("pikachu 1/0", 1, "ja")).cards.map((c) => c.id)).toEqual(["ja:SV-P-001"]);
+  });
+
+  it("ja + Japanese name + number, or number only, uses the localId filter on the ja API", async () => {
+    const fn = mockFetch(
+      tcgdexRoutes((url) => (url.pathname === "/v2/ja/cards" ? jaPikachuCards : undefined)),
+    );
+    const res = await searchCards("ピカチュウ 025", 1, "ja");
+    const [call] = cardsCalls(fn, "ja");
+    expect(call.searchParams.get("localId")).toBe("25");
+    expect(call.searchParams.get("name")).toBe("ピカチュウ");
+    expect(res.cards.map((c) => c.id)).toEqual(["ja:SV2a-025"]);
+    fn.mockClear();
+    expect((await searchCards("30", 1, "ja")).cards.map((c) => c.id)).toEqual(["ja:M2-030"]);
+    expect(cardsCalls(fn, "ja")[0].searchParams.has("name")).toBe(false);
+  });
+
+  it("queries without a number keep the plain name search", async () => {
+    const fn = mockFetch(tcgdexRoutes((url) => (url.pathname === "/v2/en/cards" ? searchPage : undefined)));
+    await searchCards("Porygon2");
+    const [call] = cardsCalls(fn);
+    expect(call.searchParams.get("name")).toBe("Porygon2");
+    expect(call.searchParams.has("localId")).toBe(false);
+    expect(call.searchParams.get("pagination:itemsPerPage")).toBe("24");
+  });
+});

@@ -9,6 +9,7 @@ import type {
   Serie,
   SetDetail,
   SetSummary,
+  StampedPrinting,
   TcgplayerPrice,
   Variant,
 } from "../types";
@@ -22,6 +23,7 @@ import type {
   RawTcgplayer,
   RawTcgplayerVariant,
   RawValet,
+  RawVariantDetailed,
 } from "./raw";
 import { joinId } from "../lang";
 
@@ -160,6 +162,82 @@ export function normalizePrices(pricing: RawCard["pricing"], lang: Lang = "en"):
   return prices;
 }
 
+/** `variants_detailed[].type` → app variant ("lenticular" is a holo printing, see normalizeStamped). */
+const DETAILED_TYPES: Record<string, Variant> = {
+  normal: "normal",
+  holo: "holo",
+  reverse: "reverse",
+  firstEdition: "firstEdition",
+  "first-edition": "firstEdition",
+  "1st-edition": "firstEdition",
+  lenticular: "holo",
+};
+
+function normalizeCardmarketBlock(raw: RawCardmarket | null | undefined): CardmarketPrice | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const p: CardmarketPrice = {
+    avg: price(raw.avg),
+    low: price(raw.low),
+    trend: price(raw.trend),
+    avg7: price(raw.avg7),
+    avg30: price(raw.avg30),
+  };
+  return hasAny(p) ? p : undefined;
+}
+
+function tcgplayerBlockFor(raw: RawTcgplayer | null | undefined, variant: Variant): TcgplayerPrice | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  for (const key of TCGPLAYER_KEYS[variant]) {
+    const block = raw[key];
+    if (!block || typeof block !== "object") continue;
+    const p = normalizeTcgplayerVariant(block);
+    if (p) return p;
+  }
+  return undefined;
+}
+
+/**
+ * Stamped printings from TCGdex `variants_detailed`: one per standard-size printing that has a
+ * stamp, deduplicated by (variant, stamp), in TCGdex order. Jumbo printings are skipped.
+ * "lenticular" printings become holo with a "lenticular" stamp slug first (so an unstamped
+ * lenticular printing is listed as stamp "lenticular"). TCGPlayer prices come from the block that
+ * matches the variant (same keys as `TCGPLAYER_KEYS`; dropped for Japanese cards); Cardmarket from
+ * the main (non "-holo") fields.
+ */
+export function normalizeStamped(
+  detailed: RawVariantDetailed[] | null | undefined,
+  lang: Lang = "en",
+): StampedPrinting[] {
+  if (!Array.isArray(detailed)) return [];
+  const out: StampedPrinting[] = [];
+  const seen = new Set<string>();
+  for (const d of detailed) {
+    if (!d || typeof d !== "object") continue;
+    if (d.size && d.size !== "standard") continue;
+    const type = d.type ?? "";
+    const variant = DETAILED_TYPES[type];
+    if (!variant) continue;
+    const slugs = (Array.isArray(d.stamp) ? d.stamp : []).filter(
+      (x): x is string => typeof x === "string" && x.length > 0,
+    );
+    if (type === "lenticular" && !slugs.includes("lenticular")) slugs.unshift("lenticular");
+    if (!slugs.length) continue;
+    const stamp = slugs.join("+");
+    const key = `${variant}:${stamp}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const tcgplayer = lang === "en" ? tcgplayerBlockFor(d.pricing?.tcgplayer, variant) : undefined;
+    const cardmarket = normalizeCardmarketBlock(d.pricing?.cardmarket);
+    out.push({
+      variant,
+      stamp,
+      ...(tcgplayer ? { tcgplayer } : {}),
+      ...(cardmarket ? { cardmarket } : {}),
+    });
+  }
+  return out;
+}
+
 function normalizeVariants(raw: RawCard): Variant[] {
   const flags = raw.variants ?? {};
   const out = VARIANT_ORDER.filter((v) => flags[v] === true);
@@ -200,7 +278,12 @@ export function normalizeCard(
     serieName: serie?.name,
     variants: normalizeVariants(raw),
     prices: normalizePrices(raw.pricing, lang),
+    ...withStamped(normalizeStamped(raw.variants_detailed, lang)),
   };
+}
+
+function withStamped(stamped: StampedPrinting[]): { stamped?: StampedPrinting[] } {
+  return stamped.length ? { stamped } : {};
 }
 
 export function normalizeSetSummary(

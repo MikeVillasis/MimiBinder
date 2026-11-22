@@ -138,6 +138,14 @@ describe("row conversion", () => {
     expect(fromRemoteRow<Rec>(tomb)?.deletedAt).toBe("2026-01-02T00:00:00Z");
   });
 
+  it("carries new entry fields such as `stamp` through push and pull unchanged", () => {
+    const e = { ...rec("a", "2026-01-01T00:00:00Z"), variant: "holo", stamp: "pokemon-center" };
+    const pushed = toPushRow(e);
+    expect(pushed.data).toEqual(e);
+    const pulled = fromRemoteRow<typeof e>({ ...pushed, deleted_at: null, synced_at: "s" });
+    expect(pulled?.stamp).toBe("pokemon-center");
+  });
+
   it("fromRemoteRow rejects malformed rows", () => {
     const base = row(rec("a", "2026-01-01T00:00:00Z"), "s");
     expect(fromRemoteRow({ ...base, data: null })).toBeNull();

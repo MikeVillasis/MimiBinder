@@ -73,6 +73,45 @@ describe("entries", () => {
   });
 });
 
+describe("stamped entries", () => {
+  it("addEntry keeps the stamp; an empty stamp is dropped", async () => {
+    const e = await addEntry(entryInputFromCard(card, { variant: "holo", stamp: "pokemon-center" }));
+    expect((await db.entries.get(e.id))!.stamp).toBe("pokemon-center");
+    const plain = await addEntry(entryInputFromCard(card, { variant: "holo", stamp: "" }));
+    expect("stamp" in (await db.entries.get(plain.id))!).toBe(false);
+  });
+
+  it("updateEntry sets and clears the stamp", async () => {
+    const e = await addEntry(entryInputFromCard(card, { variant: "holo" }));
+    await updateEntry(e.id, { stamp: "set-logo+staff" });
+    expect((await db.entries.get(e.id))!.stamp).toBe("set-logo+staff");
+    await updateEntry(e.id, { quantity: 2 });
+    expect((await db.entries.get(e.id))!.stamp).toBe("set-logo+staff");
+    await updateEntry(e.id, { stamp: undefined });
+    expect("stamp" in (await db.entries.get(e.id))!).toBe(false);
+  });
+
+  it("stamp round-trips through export / import; old backups without stamp still import", async () => {
+    const e = await addEntry(entryInputFromCard(card, { variant: "holo", stamp: "pokemon-center" }));
+    const json = await exportCollection();
+    await db.entries.clear();
+    await importCollection(json, "merge");
+    expect((await db.entries.get(e.id))!.stamp).toBe("pokemon-center");
+
+    const old = { ...e, id: "old-1" } as Partial<CollectionEntry>;
+    delete old.stamp;
+    const res = await importCollection(
+      JSON.stringify({ version: 1, entries: [old, { ...e, id: "old-2", stamp: null }, { ...e, id: "old-3", stamp: "" }] }),
+      "merge",
+    );
+    expect(res.entries).toBe(3);
+    for (const id of ["old-1", "old-2", "old-3"]) expect("stamp" in (await db.entries.get(id))!).toBe(false);
+    await expect(
+      importCollection(JSON.stringify({ version: 1, entries: [{ ...e, id: "bad", stamp: 5 }] }), "merge"),
+    ).rejects.toBeInstanceOf(ImportError);
+  });
+});
+
 describe("binders", () => {
   it("create / update / remove (tombstone + detach from entries)", async () => {
     const b = await createBinder("  Favourites ", "best");

@@ -1,7 +1,7 @@
-// Public daily price history for one card (all variants), oldest first.
+// Public daily price history for one card (all printings, stamped included), oldest first.
 import { cacheLife } from "next/cache";
 import { createSupabasePublicClient, isSupabaseConfigured } from "@/lib/supabase/server";
-import { rowToSnapshot } from "@/lib/sync/snapshots";
+import { readHistoryRows } from "@/lib/sync/snapshots";
 import type { PriceSnapshot } from "@/lib/types";
 
 const MAX_ROWS = 2000; // ~1.3 years of 4 variants
@@ -12,17 +12,9 @@ async function getHistory(cardId: string): Promise<PriceSnapshot[]> {
   cacheLife("hours");
   const supabase = createSupabasePublicClient();
   if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("price_snapshots")
-    .select("card_id, variant, date, tcgplayer_market_usd, cardmarket_trend_eur")
-    .eq("card_id", cardId)
-    .order("date", { ascending: false })
-    .limit(MAX_ROWS);
-  if (error) throw new Error(error.message); // thrown errors are not cached
-  return (data ?? [])
-    .map(rowToSnapshot)
-    .filter((s): s is PriceSnapshot => s !== null)
-    .reverse();
+  // Each snapshot carries `stamp` ("" for regular printings, and for every row before migration 0002).
+  // Thrown errors are not cached.
+  return (await readHistoryRows(supabase, cardId, MAX_ROWS)).reverse();
 }
 
 export async function GET(_request: Request, ctx: { params: Promise<{ cardId: string }> }) {

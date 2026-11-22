@@ -28,6 +28,8 @@ export function entryInputFromCard(
   card: CardDetail,
   opts: {
     variant: Variant;
+    /** Stamp of a stamped printing (StampedPrinting.stamp); omit for regular printings. */
+    stamp?: string;
     condition?: Condition;
     quantity?: number;
     purchasePrice?: number;
@@ -63,6 +65,7 @@ export async function addEntry(input: NewEntryInput): Promise<CollectionEntry> {
   }
   const entry: CollectionEntry = stripUndefined({
     ...input,
+    stamp: input.stamp || undefined, // "" means a regular printing
     id: crypto.randomUUID(),
     condition: input.condition ?? "NM",
     quantity: Math.max(1, Math.floor(input.quantity ?? 1)),
@@ -75,7 +78,10 @@ export async function addEntry(input: NewEntryInput): Promise<CollectionEntry> {
   return entry;
 }
 
-/** Patch an entry and bump updatedAt. `id` and `createdAt` cannot be changed. */
+/**
+ * Patch an entry and bump updatedAt. `id` and `createdAt` cannot be changed.
+ * `stamp: undefined` or `stamp: ""` turns the entry back into a regular printing.
+ */
 export async function updateEntry(id: string, patch: Partial<CollectionEntry>): Promise<void> {
   const rest: Partial<CollectionEntry> = { ...patch };
   delete rest.id;
@@ -83,7 +89,9 @@ export async function updateEntry(id: string, patch: Partial<CollectionEntry>): 
   await db.transaction("rw", db.entries, async () => {
     const current = await db.entries.get(id);
     if (!current) throw new Error(`Entry ${id} not found`);
-    await db.entries.put({ ...current, ...rest, id, updatedAt: nowIso() });
+    const next: CollectionEntry = { ...current, ...rest, id, updatedAt: nowIso() };
+    if (!next.stamp) delete next.stamp;
+    await db.entries.put(next);
   });
 }
 
@@ -185,6 +193,11 @@ const entrySchema = z.object({
   serieName: optStr,
   rarity: optStr,
   variant: z.enum(["normal", "holo", "reverse", "firstEdition"]),
+  // Added with stamped printings; older backups have no stamp. "" means a regular printing.
+  stamp: z
+    .string()
+    .nullish()
+    .transform((v) => v || undefined),
   condition: z.enum(["NM", "LP", "MP", "HP", "DMG"]),
   quantity: z.number().int().min(0),
   purchasePrice: z

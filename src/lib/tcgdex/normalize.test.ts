@@ -9,6 +9,7 @@ import {
   jaSerieDetails,
   jaSetDetailSV2a,
   jaSetOrder,
+  nsZorua,
   searchPage,
   serieDetails,
   setDetail151,
@@ -24,6 +25,7 @@ import {
   normalizePrices,
   normalizeSet,
   normalizeSerie,
+  normalizeStamped,
   setIdFromCardId,
 } from "./normalize";
 
@@ -268,5 +270,72 @@ describe("Japanese normalisation (ja: prefixed ids)", () => {
     // Prefixed exclusion set ids are matched against prefixed card ids.
     expect(isExcludedCard(jaPikachuCards[1], new Set(["ja:SV1V"]), "ja")).toBe(true);
     expect(isExcludedCard(jaPikachuCards[1], new Set(["SV1V"]), "ja")).toBe(false);
+  });
+});
+
+describe("stamped printings", () => {
+  it("svp-189: Pokémon Center holo with its own prices; unstamped prices unchanged", () => {
+    const card = normalizeCard(nsZorua);
+    expect(card.variants).toEqual(["holo"]);
+    expect(card.prices.tcgplayer?.variants.holo?.market).toBe(8.99);
+    expect(card.prices.cardmarket?.normal.trend).toBe(7.75);
+    expect(card.stamped).toEqual([
+      {
+        variant: "holo",
+        stamp: "pokemon-center",
+        tcgplayer: { low: 34.68, mid: 41.09, high: 559.18, market: 38.17 },
+        cardmarket: { avg: 57, low: 40, trend: 71.71, avg7: 62.1, avg30: 82.55 },
+      },
+    ]);
+  });
+
+  it("omits `stamped` when a card has no stamped printings", () => {
+    expect(normalizeCard(bulbasaur).stamped).toBeUndefined();
+    expect(normalizeCard({ ...nsZorua, variants_detailed: [nsZorua.variants_detailed![0]] }).stamped).toBeUndefined();
+  });
+
+  it("maps types, joins slugs, dedupes, skips jumbo and unknown types", () => {
+    const tp = (key: string, market: number) => ({ tcgplayer: { [key]: { marketPrice: market, midPrice: 1 } } });
+    const out = normalizeStamped([
+      { type: "normal", size: "standard", stamp: ["set-logo", "staff"], pricing: tp("normal", 3) },
+      { type: "normal", size: "standard", stamp: ["set-logo", "staff"], pricing: tp("normal", 99) },
+      { type: "reverse", size: "standard", stamp: ["player-rewards-program"], pricing: tp("reverse-holofoil", 4) },
+      { type: "holo", size: "standard", stamp: ["worlds-2023"], pricing: tp("unlimited-holofoil", 5) },
+      { type: "firstEdition", size: "standard", stamp: ["gamestop"], pricing: tp("1st-edition", 6) },
+      { type: "holo", size: "jumbo", stamp: ["pokemon-center"] },
+      { type: "metal", size: "standard", stamp: ["x"] },
+      { type: "normal", stamp: [] },
+      { type: "normal", stamp: ["snowflake"], pricing: tp("holofoil", 7) },
+    ]);
+    expect(out.map((p) => [p.variant, p.stamp, p.tcgplayer?.market])).toEqual([
+      ["normal", "set-logo+staff", 3],
+      ["reverse", "player-rewards-program", 4],
+      ["holo", "worlds-2023", 5],
+      ["firstEdition", "gamestop", 6],
+      ["normal", "snowflake", undefined],
+    ]);
+  });
+
+  it("lenticular becomes holo with a leading lenticular stamp, even when unstamped", () => {
+    const out = normalizeStamped([
+      { type: "lenticular", size: "standard" },
+      { type: "lenticular", size: "standard", stamp: ["pokemon-center"], pricing: { tcgplayer: { holofoil: { marketPrice: 12 } } } },
+    ]);
+    expect(out).toEqual([
+      { variant: "holo", stamp: "lenticular" },
+      { variant: "holo", stamp: "lenticular+pokemon-center", tcgplayer: { low: null, mid: null, high: null, market: 12 } },
+    ]);
+  });
+
+  it("Japanese cards drop TCGPlayer but keep Cardmarket", () => {
+    const out = normalizeStamped(nsZorua.variants_detailed, "ja");
+    expect(out[0].tcgplayer).toBeUndefined();
+    expect(out[0].cardmarket?.trend).toBe(71.71);
+  });
+
+  it("tolerates missing or malformed variants_detailed", () => {
+    expect(normalizeStamped(undefined)).toEqual([]);
+    expect(normalizeStamped(null)).toEqual([]);
+    expect(normalizeStamped([null as never, {}])).toEqual([]);
   });
 });
