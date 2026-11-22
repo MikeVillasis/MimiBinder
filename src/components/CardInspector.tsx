@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
+import { useBackToClose } from "./useBackToClose";
 import { cardImage } from "@/lib/pricing";
 import { CardBack } from "./CardBack";
 
@@ -52,6 +53,8 @@ export function CardInspector() {
   }, []);
 
   const close = useCallback(() => setCard(null), []);
+  // Android back gesture / browser Back closes the inspector instead of navigating underneath it.
+  useBackToClose(!!card, close);
 
   if (!card) return null;
   return createPortal(<InspectorOverlay key={openId} card={card} onClose={close} />, document.body);
