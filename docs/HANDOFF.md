@@ -24,10 +24,12 @@ MimiBinder is a free, non-commercial, MIT-licensed Pokémon TCG collection and p
 - The owner is in Canada (CAD is the default currency), collects English cards only, and wants clear, friendly explanations.
 
 ## Open items (priority order)
-1. **Real-phone check:** ask the owner how the Spatial Rift and Star Requiem shaders feel (smoothness, battery), and whether the card inspector's pinch, twist and two-finger move work, the hold opens it without the native "save image" menu (iOS and Android), and the flick-spin friction feels right (`CardInspector.tsx`).
-2. **PSA grading phase 1:** in-browser centering measurement from phone photos, following the research report's pipeline (worst-point measurement, homography, sub-pixel edges).
-3. **More card-inspired themes:** follow the Spatial Rift (Palkia) and Star Requiem (Giratina) pattern: k-means palette, WCAG AA tokens in `globals.css`, registry entry with credit, original WebGL1 shader (≤30fps, DPR ≤1.5).
-4. **Japanese cards follow-ups:** the JP badge sits over the name strip on full-art images; consider a smaller badge. Many Japanese cards (all of the newest Mega sets) have no TCGdex image yet.
+1. **Owner action: run `supabase/migrations/0002_stamped_printings.sql`** in the Supabase SQL editor (after the deploy that contains it). Until then the daily snapshot records regular printings only; stamped printings (Pokémon Center etc.) get no price history.
+2. **Real-phone checks:** shader smoothness and battery (Spatial Rift, Star Requiem); card inspector pinch, twist, two-finger move, native long-press menu suppression and flick friction; and the centering tool on real photos.
+3. **Validate centering on real cards** (research report, phase 1): ~10 cards scanned at 1200 dpi as ground truth, each photographed 5 times; show whole-number ratios only if the worst error stays ≤ ~1 point. Synthetic accuracy today: max 0.27 points (normal), 0.80 (heavy blur/noise). Known weak spots: card on a background close to its border colour (silver on white/grey), drop shadows, strong straight lines right next to the card edge.
+4. **PSA phase 2:** classical corner and edge checks (whitening against the sampled border colour, strongest on the blue back), shown as flags with evidence crops, not subgrades.
+5. **More card-inspired themes:** follow the Spatial Rift (Palkia) and Star Requiem (Giratina) pattern.
+6. **Japanese cards follow-ups:** the JP badge sits over the name strip on full-art images; many Japanese cards (all of the newest Mega sets) have no TCGdex image yet.
 
 ## Testing in the cloud
 The "MimiBinder" cloud environment allows `api.tcgdex.net`, `assets.tcgdex.net` and `www.bankofcanada.ca`. Start the production server with `NODE_USE_ENV_PROXY=1 npx next start` so server-side fetches go through the proxy. Run `npm run build` before `npm run typecheck` on a fresh clone (it generates `PageProps`/`LayoutProps`).

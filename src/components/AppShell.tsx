@@ -16,6 +16,10 @@ const NAV = [
   { href: "/settings", label: "Settings", icon: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.5 4a6.5 6.5 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a6.6 6.6 0 0 0-2-1.2L15.6 3h-4l-.4 2.6a6.6 6.6 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a6.500 6.500 0 0 0 0 2.400l-2 1.600 2 3.400 2.400-1a6.600 6.600 0 0 0 2 1.200l.4 2.600h4l.4-2.600a6.600 6.600 0 0 0 2-1.200l2.400 1 2-3.400-2-1.600c.1-.4.1-.8.1-1.200z" },
 ] as const;
 
+// Desktop sidebar only: the mobile bottom bar stays at five items (phones reach this from Home and each card).
+const CENTERING = { href: "/centering", label: "Centering", icon: "M4 4h16v16H4zM7 7v10h10V7z" } as const;
+const SIDE_NAV = [...NAV.slice(0, 4), CENTERING, NAV[4]];
+
 function isActive(path: string, href: string) {
   return href === "/" ? path === "/" : path === href || path.startsWith(href + "/");
 }
@@ -42,7 +46,7 @@ function Logo() {
 function SideNav({ path }: { path: string }) {
   return (
     <nav aria-label="Main" className="flex flex-col gap-1">
-      {NAV.map((n) => {
+      {SIDE_NAV.map((n) => {
         const active = isActive(path, n.href);
         return (
           <Link

@@ -27,5 +27,26 @@ export interface PsaCeiling {
 
 /** Best PSA grade the measured centering allows. Pass null for a face that was not measured. */
 export function psaCeiling(front: CenteringResult | null, back: CenteringResult | null): PsaCeiling {
-  throw new Error("not implemented");
+  const EPS = 1e-6;
+  const axes: { face: "front" | "back"; name: string; ratio: number }[] = [];
+  for (const [face, r] of [["front", front], ["back", back]] as const) {
+    if (!r) continue;
+    axes.push({ face, name: "left/right", ratio: r.lr.worst }, { face, name: "top/bottom", ratio: r.tb.worst });
+  }
+  const measured = { front: front !== null, back: back !== null };
+  const limit = (l: PsaCenteringLimit, face: "front" | "back") => (face === "front" ? l.frontMax : l.backMax);
+  const describe = (a: (typeof axes)[number]) => `${a.face} ${a.name} ${a.ratio.toFixed(1)}/${(100 - a.ratio).toFixed(1)}`;
+  let prevFail: (typeof axes)[number] | undefined;
+  for (const l of PSA_CENTERING) {
+    // The axis that misses this grade by the most (relative to its own limit), if any.
+    let worst: (typeof axes)[number] | undefined;
+    let worstExcess = 0;
+    for (const a of axes) {
+      const excess = a.ratio - limit(l, a.face);
+      if (excess > EPS && (!worst || excess > worstExcess)) { worst = a; worstExcess = excess; }
+    }
+    if (!worst) return { grade: l.grade, label: l.label, limitedBy: prevFail && describe(prevFail), measured };
+    prevFail = worst;
+  }
+  return { grade: 1, label: "Poor", limitedBy: prevFail && describe(prevFail), measured };
 }

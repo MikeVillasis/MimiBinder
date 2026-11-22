@@ -26,6 +26,13 @@ Supabase (owner-only sync + price history), Recharts, Zod, Vitest. Hosted on Ver
   never parse ids by hand. Japanese cards have Japanese names only: English search goes through
   `src/lib/tcgdex/pokedex-en.ts` (Pokédex name table) and `species.ts`. They have no TCGPlayer data, so
   `effectiveSource()` in `pricing.ts` always prices them from Cardmarket. Many have no image yet.
+- **Stamped printings** (Pokémon Center, prerelease, Staff, …) come from TCGdex `variants_detailed` as
+  `CardDetail.stamped`; an entry's printing is `variant` + optional `stamp` (labels in `src/lib/stamps.ts`).
+  Price snapshots key on (card_id, variant, stamp, date) after migration 0002.
+- **Search** splits a query into a name and a card number (`src/lib/search-query.ts`): "Zorua 189", "#189",
+  "189/159", "TG05".
+- **Centering tool** (`/centering`): a pure-TS engine in `src/lib/centering/` (detect, warp, sub-pixel border
+  fit, worst-point ratios, PSA ceiling) run in a Web Worker; photos never leave the device.
 - Images: TCGdex asset base URL + `/{quality}.webp` where quality is `low` or `high`.
   Use plain `<img loading="lazy">` (not next/image) to stay inside Vercel Hobby image-optimisation quota.
 

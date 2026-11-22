@@ -9,6 +9,7 @@ import { getCachedCards, putCachedCards, useEntries } from "@/lib/db";
 import { langOf } from "@/lib/lang";
 import type { CardDetail } from "@/lib/types";
 import { CONDITION_LABELS, VARIANT_LABELS } from "@/lib/types";
+import { printingKey, printingLabel } from "@/lib/stamps";
 import { AddToCollectionSheet } from "./AddToCollectionSheet";
 import { CardImage } from "./CardImage";
 import { openCardInspector } from "./CardInspector";
@@ -102,6 +103,16 @@ export function CardView({ id }: { id: string }) {
               </svg>
               Inspect
             </Button>
+            <Link
+              href={`/centering?card=${encodeURIComponent(card.id)}`}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-line bg-surface-2 px-4 text-sm font-semibold text-fg transition hover:bg-line"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <rect x="4" y="4" width="16" height="16" rx="1" />
+                <rect x="8" y="7" width="8" height="10" />
+              </svg>
+              Check centering
+            </Link>
             <p className="min-w-0 flex-1 text-xs text-muted">Tip: press and hold any card to inspect it.</p>
           </div>
         </div>
@@ -123,6 +134,9 @@ export function CardView({ id }: { id: string }) {
             <div className="mt-2 flex flex-wrap gap-1.5">
               {card.variants.map((v) => (
                 <Badge key={v}>{VARIANT_LABELS[v]}</Badge>
+              ))}
+              {card.stamped?.map((s) => (
+                <Badge key={printingKey(s.variant, s.stamp)}>{printingLabel(s.variant, s.stamp)}</Badge>
               ))}
               {card.hp != null && <Badge>HP {card.hp}</Badge>}
               {card.types?.map((t) => (
@@ -152,7 +166,7 @@ export function CardView({ id }: { id: string }) {
                 {owned.map((e) => (
                   <li key={e.id} className="flex justify-between gap-2">
                     <span>
-                      {VARIANT_LABELS[e.variant]} · {CONDITION_LABELS[e.condition]}
+                      {printingLabel(e.variant, e.stamp)} · {CONDITION_LABELS[e.condition]}
                     </span>
                     <span className="font-semibold tabular-nums">×{e.quantity}</span>
                   </li>

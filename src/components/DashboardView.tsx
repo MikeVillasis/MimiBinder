@@ -7,7 +7,7 @@ import { groupBySet, setCompletion } from "@/lib/collection";
 import { useEntries } from "@/lib/db";
 import { langOf, splitId } from "@/lib/lang";
 import { useCollectionPrices } from "@/lib/useCollectionPrices";
-import { VARIANT_LABELS } from "@/lib/types";
+import { printingLabel } from "@/lib/stamps";
 import { CardImage } from "./CardImage";
 import { cardHref, entryCost, entryValue, useAsync, useMoney } from "./hooks";
 import { EmptyState, LangBadge, PageHeader, ProgressBar, SetLogo, Skeleton, Stat } from "./ui";
@@ -115,6 +115,20 @@ export function DashboardView() {
         <Stat label="Unique" value={stats.unique} sub="different cards" />
       </section>
 
+      <Link href="/centering" className="flex min-h-11 items-center gap-3 rounded-2xl border border-line bg-surface p-3 hover:border-accent/50">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="4" y="4" width="16" height="16" rx="1" />
+            <rect x="8" y="7" width="8" height="10" />
+          </svg>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold">Centering check</span>
+          <span className="block text-xs text-muted">Measure a card from phone photos, on your device.</span>
+        </span>
+        <span className="text-muted" aria-hidden="true">→</span>
+      </Link>
+
       <section aria-labelledby="top-h">
         <h2 id="top-h" className="mb-3 text-lg font-bold">
           Most valuable
@@ -136,7 +150,7 @@ export function DashboardView() {
                       {langOf(e.cardId) === "ja" && <LangBadge className="shrink-0" />}
                     </div>
                     <div className="truncate text-xs text-muted">
-                      {e.setName} · {VARIANT_LABELS[e.variant]} ×{e.quantity}
+                      {e.setName} · {printingLabel(e.variant, e.stamp)} ×{e.quantity}
                     </div>
                   </div>
                   <div className="text-sm font-bold tabular-nums text-accent">{fmtDisplay(v!)}</div>
