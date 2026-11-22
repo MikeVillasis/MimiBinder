@@ -70,6 +70,20 @@ export interface CardSummary {
   image?: string; // TCGdex asset base URL (no quality/extension suffix)
 }
 
+/**
+ * A special printing of a card that carries a stamp (Pokémon Center, prerelease set logo, Staff, Player
+ * Rewards, GameStop…), from TCGdex `variants_detailed`. `stamp` is the TCGdex stamp slugs joined with "+"
+ * in TCGdex order (e.g. "pokemon-center", "set-logo+staff"); see ./stamps.ts for labels. Unstamped
+ * printings stay in `CardDetail.variants` / `CardDetail.prices` exactly as before.
+ */
+export interface StampedPrinting {
+  variant: Variant;
+  stamp: string;
+  /** This printing's own prices (TCGPlayer in USD, Cardmarket in EUR), when TCGdex has them. */
+  tcgplayer?: TcgplayerPrice;
+  cardmarket?: CardmarketPrice;
+}
+
 export interface CardDetail extends CardSummary {
   rarity?: string;
   illustrator?: string;
@@ -85,6 +99,8 @@ export interface CardDetail extends CardSummary {
   serieName?: string;
   variants: Variant[]; // printings that exist for this card
   prices: CardPrices;
+  /** Stamped printings (empty or missing when there are none). */
+  stamped?: StampedPrinting[];
 }
 
 export interface SetSummary {
@@ -125,6 +141,8 @@ export interface CollectionEntry {
   serieName?: string;
   rarity?: string;
   variant: Variant;
+  /** Stamp of a stamped printing (see StampedPrinting.stamp); absent for regular printings. */
+  stamp?: string;
   condition: Condition;
   quantity: number;
   purchasePrice?: number; // per copy
@@ -162,6 +180,8 @@ export interface FxRate {
 export interface PriceSnapshot {
   cardId: string;
   variant: Variant;
+  /** Stamp of a stamped printing; "" or absent for regular printings. */
+  stamp?: string;
   date: string; // YYYY-MM-DD
   tcgplayerMarketUsd: number | null;
   cardmarketTrendEur: number | null;
