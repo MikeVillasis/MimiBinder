@@ -82,12 +82,14 @@ export function SetBinderView({ setId }: { setId: string }) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Segmented<View>
+            size="sm"
             label="View"
             value={view}
             onChange={(v) => writePref(PREF.setView, v)}
             options={[{ value: "grid", label: "Grid" }, { value: "pages", label: "Pages" }]}
           />
           <Segmented<Show>
+            size="sm"
             label="Show"
             value={show}
             onChange={setShow}

@@ -30,6 +30,7 @@ MimiBinder is a free, non-commercial, MIT-licensed Pokémon TCG collection and p
 4. **PSA phase 2:** classical corner and edge checks (whitening against the sampled border colour, strongest on the blue back), shown as flags with evidence crops, not subgrades.
 5. **More card-inspired themes:** follow the Spatial Rift (Palkia) and Star Requiem (Giratina) pattern.
 6. **Japanese cards follow-ups:** the JP badge sits over the name strip on full-art images; many Japanese cards (all of the newest Mega sets) have no TCGdex image yet.
+7. **Fun upgrades (branch `claude/fun-upgrades`, see `docs/proposals/FUN_UPGRADES.md`):** items 1–10 are built (binder pocket pages, holo tilt, "Added!" reveal, set milestones, dealt-in grids, hold ring and coach hint, Home total count-up, "New" badge, card-fan empty states, Settings › Feel). Needs the owner's review and a real-phone check (haptics, swipe paging, reveal smoothness), then answers to the open questions in that doc before items 11–19.
 
 ## Testing in the cloud
 The "MimiBinder" cloud environment allows `api.tcgdex.net`, `assets.tcgdex.net` and `www.bankofcanada.ca`. Start the production server with `NODE_USE_ENV_PROXY=1 npx next start` so server-side fetches go through the proxy. Run `npm run build` before `npm run typecheck` on a fresh clone (it generates `PageProps`/`LayoutProps`).

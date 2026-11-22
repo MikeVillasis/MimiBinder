@@ -56,3 +56,16 @@ Every theme (`default`, `palkia`, `giratina`) defines all of these. Shader theme
 ## Accessibility
 WCAG AA text contrast in every theme (check muted text on surface and surface-2), visible focus rings
 (accent, 2px offset), labels ≥12px, `prefers-reduced-motion` respected.
+
+## Fun layer (see `docs/proposals/FUN_UPGRADES.md`)
+Decorative motion borrowed from card-game UIs, kept quiet and optional:
+- Classes in the "Fun layer" block of `globals.css`: `.deal` (staggered tile entrance, index via `--deal-i`),
+  `.page-fade`, `.holo` (mouse tilt and light), `.reveal-*`, `.sparkles`, `.pop-in`, `.card-fan`, `.binder-pocket`,
+  and the `[data-holding]` hold ring.
+- Rules: transform and opacity only; no `forwards` fill on wrappers (it would trap `position: fixed` children);
+  everything is off under `prefers-reduced-motion` and under `html[data-motion="off"]` (Settings › Feel).
+- Primitives: `Switch`, `EmptyState` `art` (e.g. `<CardFan />`), `ProgressBar` `ticks` in `ui.tsx`; `HoloCard`,
+  `CountUp`, `NewBadge`, `InspectHint`, `MilestoneBanner`, `Sparkles` in `fun.tsx`.
+- Any number that animates must render the exact formatted value at rest and expose it to screen readers from the
+  first frame (`CountUp` does both).
+

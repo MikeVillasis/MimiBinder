@@ -1,7 +1,7 @@
 # Fun upgrades: making MimiBinder feel like a card game
 
-Branch: `claude/fun-upgrades`. Status legend: **Done** = implemented on this branch, **Proposal** = not built, needs
-the owner's decision.
+Branch: `claude/fun-upgrades`. Status legend: **Done** = implemented and verified on this branch, **Proposal** = not
+built, needs the owner's decision. Items 1–10 are built; 11–19 are proposals only.
 
 The brief: make browsing as fun as possible, borrowing the *feel* of TCG game UIs (Pokémon TCG Pocket and Live,
 Hearthstone, Marvel Snap, MTG Arena, physical binders), without touching prices, features, or the free and personal
@@ -21,6 +21,23 @@ nature of the app.
 - **Motion rules.** Only `transform` and `opacity` animate. Every new animation is switched off under
   `prefers-reduced-motion`, and there is a "Card shine and motion" switch in Settings for people who simply prefer calm.
 - **Theme tokens only**, checked in Midnight and Spatial Rift (light), and spot-checked in the two other themes.
+  The only literal colours are the white light and the rainbow band of the foil effect, which sit on top of card art
+  (not on app chrome) and are the same in every theme, like the card back.
+
+## Where the code lives
+
+| Piece | File |
+|-------|------|
+| Pure logic (milestones, "New" timing, count-up maths, foil tiers, page chunking) and its tests | `src/lib/fun.ts`, `src/lib/fun.test.ts` |
+| Per-device preferences (motion, haptics, set view, hint, shown milestones), all `localStorage` in try/catch | `src/lib/prefs.ts` |
+| `HoloCard`, `Sparkles`, `CountUp`, `NewBadge`, `CardFan`, `InspectHint`, `MilestoneBanner`, `useMilestone` | `src/components/fun.tsx` |
+| Binder pocket pages | `src/components/BinderPages.tsx` |
+| Route fade | `src/app/template.tsx` |
+| All animations and the calm-mode overrides | "Fun layer" block in `src/app/globals.css` |
+| `Switch`, `EmptyState` `art`, `ProgressBar` `ticks` | `src/components/ui.tsx` |
+
+Nothing under `src/lib/pricing.ts`, `src/lib/collection.ts`, `src/lib/useCollectionPrices.ts`, `src/app/api` or the
+database layer was changed. No dependency was added.
 
 ## Page-by-page review: what feels flat today
 
@@ -91,7 +108,8 @@ Effort: S (under an hour), M (a few hours), L (a day or more). Risk is the risk 
 - **What:** on a set page, a `Grid | Pages` switch. Pages shows the set as 3×3 pocket pages (two pages side by side
   on desktop, like an open binder). Swipe sideways on a phone, or use the arrow buttons or the keyboard arrow keys.
   Missing cards sit dimmed in their pocket, exactly as the grid dims them. The All/Owned/Missing filter applies to both
-  views, and the choice of view is remembered on the device.
+  views, and the choice of view is remembered on the device. A label under the pages says where you are
+  ("Page 2 of 23", or "Pages 3–4 of 23" on desktop).
 - **How it stays smooth:** native CSS scroll-snap does the paging, so the browser's compositor drives it. No gesture
   code, no layout work per frame. Images stay lazy.
 - **Safe because:** it renders the same `CardTile` with the same data; no prices are involved on this page. The grid
@@ -100,7 +118,8 @@ Effort: S (under an hour), M (a few hours), L (a day or more). Risk is the risk 
 ### 2. Holo tilt and light (Done)
 - **What:** on devices with a mouse, cards lean a few degrees toward the pointer and a soft light follows it. On the
   card page the big card gets a stronger foil band whose strength depends on the card's rarity text (plain for commons,
-  a soft sheen for holo and rare cards, a rainbow band for ultra, illustration, secret and hyper rares).
+  a soft sheen for holo and rare cards, a rainbow band for ultra, illustration, secret and hyper rares). Foil cards
+  also get one light sweep when the card page opens, which is the only part phones see.
 - **How:** one pointer listener writes two CSS variables in a `requestAnimationFrame`; the tilt is a `transform` and the
   light is an overlay whose `transform`/`opacity` change. Phones (no hover) skip it entirely, so there is no cost on
   low-end devices. Hold-to-inspect, click-to-open and drag behaviour are untouched because the wrapper adds no click or
@@ -109,14 +128,17 @@ Effort: S (under an hour), M (a few hours), L (a day or more). Risk is the risk 
 
 ### 3. "Added!" reveal (Done)
 - **What:** after you add a card, the big card does one quick turn with a sheen sweep and a small burst of sparkles,
-  with a short haptic tick on phones that support it. The existing "Added to your collection" status line stays.
+  with a short haptic tick on phones that support it. Mid-turn you see the MimiBinder card back (the app's own
+  original back, the same one the inspector uses). The existing "Added to your collection" status line stays.
 - **Safe because:** it runs after `addEntry` has resolved, it is a class toggled on the image wrapper, and it does not
   change what is saved. Reduced motion: no turn and no sparkles, only the status line.
 
 ### 4. Set completion milestones (Done)
 - **What:** the first time a set's completion is seen at or above 25, 50, 75 or 100%, the set page shows a one-time
   banner ("Halfway there", "Set complete!") with a small sparkle burst. The progress bar gains quiet tick marks at the
-  milestones. Each milestone is celebrated once per set per device (remembered in `localStorage`); dismissible.
+  milestones. Each milestone is celebrated once per set per device (remembered in `localStorage`); dismissible. If you
+  jump past several at once (say 20% to 80%), only the highest shows and the lower ones are marked as seen. The banner
+  waits until both the set and your collection have loaded, so a half-loaded 0% never counts.
 - **Safe because:** the percent comes straight from the existing `setCompletion`; nothing is recomputed. No streaks, no
   timers, no pressure: it only reacts to what you already own.
 
@@ -129,7 +151,8 @@ Effort: S (under an hour), M (a few hours), L (a day or more). Risk is the risk 
 ### 6. Hold-to-inspect feedback and coach hint (Done)
 - **What:** while you hold a card, an accent ring fades in around it over the 450 ms hold, so the hold visibly "charges".
   The first time you see cards, a small dismissible hint says "Press and hold any card to inspect it in 3D"; it goes
-  away for good once dismissed or once the inspector has been opened.
+  away for good once dismissed or once the inspector has been opened. It appears on Home, Search results, Collection
+  and set pages. The ring starts after 120 ms, so a normal tap never flashes it.
 - **Safe because:** the hold timing, slop and click-swallowing logic are unchanged; the ring is a pseudo-element driven
   by a data attribute.
 
@@ -138,11 +161,13 @@ Effort: S (under an hour), M (a few hours), L (a day or more). Risk is the risk 
 - **Price safety:** the animated text is `aria-hidden`; a visually hidden copy holds the real formatted value from the
   first frame. Intermediate frames are formatted by the same `formatMoney`. The last frame renders the exact string
   the page would have shown without the animation, and a timer forces that final string even if animation frames are
-  throttled (background tab). Reduced motion or the Settings switch: no animation at all. A unit test covers the
-  easing helper's end value.
+  throttled (background tab). Reduced motion or the Settings switch: no animation at all. It counts from the value it
+  last showed (0 the first time), so coming back to Home with an unchanged total does not replay it. Unit tests cover
+  the end value (exactly the target, never overshooting).
 
 ### 8. "New" badge (Done)
-- Cards added in the last 3 days carry a small "New" badge on Home and in the Collection grid.
+- Cards added in the last 3 days carry a small "New" badge on Home and in the Collection grid. The link's accessible
+  name says "new" too.
 
 ### 9. Empty states and copy (Done)
 - First-run Home, empty Collection and empty custom binder show a small fan of MimiBinder card backs (the app's own
@@ -183,3 +208,12 @@ Effort: S (under an hour), M (a few hours), L (a day or more). Risk is the risk 
 2. Is hover tilt on every tile welcome on desktop, or should it be limited to the card page?
 3. Do you want sounds (item 12) at all?
 4. May we try the experimental View Transitions flag (item 11)?
+
+## Verification (this branch)
+
+- `npm run build`, `npm run typecheck`, `npm run lint`, `npm test` all pass.
+- Playwright, 375×812 with touch and 1366×860, Midnight and Spatial Rift, every route: no page errors, no horizontal
+  scroll. Star Requiem and Raging Amethyst spot-checked.
+- Prices compared with `main` using the same seeded collection: Home total and the `/card/sv03.5-199` headline are
+  identical (values in the pull request / hand-off notes).
+- Inspector: opens by hold and by the Inspect button, turns, flips, and Back closes it without leaving the page.
