@@ -95,7 +95,7 @@ See `.env.example` for the full list with comments.
 1. Push this folder to a GitHub repository and import it at vercel.com/new (Hobby plan, framework auto-detected).
 2. Settings → Environment Variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `CRON_SECRET` (generate with `openssl rand -hex 32`).
 3. Deploy. `vercel.json` schedules `/api/cron/snapshot` daily around 10:00 UTC (Hobby allows once per day).
-4. Test the snapshot by hand: `curl -H "Authorization: Bearer $CRON_SECRET" https://<your-domain>/api/cron/snapshot`.
+4. Run the snapshot by hand with `sh scripts/run-snapshot.sh https://<your-domain>` (prompts for `CRON_SECRET` without echoing it).
 
 The Hobby plan is for personal, non-commercial use. Supabase pauses free projects after 7 days without activity; the daily cron keeps it awake.
 
