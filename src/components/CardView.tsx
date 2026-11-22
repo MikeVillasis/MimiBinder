@@ -10,6 +10,7 @@ import type { CardDetail } from "@/lib/types";
 import { CONDITION_LABELS, VARIANT_LABELS } from "@/lib/types";
 import { AddToCollectionSheet } from "./AddToCollectionSheet";
 import { CardImage } from "./CardImage";
+import { openCardInspector } from "./CardInspector";
 import { PriceHistoryChart } from "./PriceHistoryChart";
 import { PriceTable } from "./PriceTable";
 import { Badge, Button, ErrorState, Sheet, Skeleton } from "./ui";
@@ -93,6 +94,15 @@ export function CardView({ id }: { id: string }) {
           <button type="button" onClick={() => setZoom(true)} aria-label={`Zoom ${card.name}`} className="block w-full cursor-zoom-in">
             <CardImage image={card.image} name={card.name} quality="high" className="card-shadow" />
           </button>
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <Button variant="secondary" onClick={() => openCardInspector({ image: card.image, name: card.name })}>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M5 9V5h4M19 9V5h-4M5 15v4h4M19 15v4h-4" />
+              </svg>
+              Inspect
+            </Button>
+            <p className="min-w-0 flex-1 text-xs text-muted">Tip: press and hold any card to inspect it.</p>
+          </div>
         </div>
 
         <div className="flex min-w-0 flex-col gap-4">

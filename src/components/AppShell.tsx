@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { useSync } from "@/lib/sync";
+import { CardInspector } from "./CardInspector";
 import { useTrackNavigation } from "./navHistory";
 import { ShaderBackground } from "./theme/ShaderBackground";
 
@@ -71,7 +72,7 @@ function BottomNav({ path }: { path: string }) {
             <Link
               href={n.href}
               aria-current={active ? "page" : undefined}
-              className={`flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${
+              className={`flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs font-medium ${
                 active ? "text-accent" : "text-muted"
               }`}
             >
@@ -104,6 +105,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-dvh md:pl-60">
       <ShaderBackground />
       <SyncMount />
+      <CardInspector />
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col gap-6 border-r border-line bg-surface/80 p-4 backdrop-blur md:flex">
         <Link href="/" className="px-2 py-3" aria-label="MimiBinder home">
           <Logo />
