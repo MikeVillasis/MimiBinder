@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { jaBulbasaur } from "@/lib/tcgdex/fixtures.test-data";
+import { normalizeCard } from "@/lib/tcgdex/normalize";
 import type { CardDetail } from "@/lib/types";
 import {
   buildFxRow,
@@ -148,5 +150,15 @@ describe("mapWithConcurrency", () => {
     );
     expect(results.filter(Boolean)).toHaveLength(2);
     expect(skipped).toBe(2);
+  });
+});
+
+describe("Japanese cards", () => {
+  it("snapshot Cardmarket only, TCGPlayer null, keeping the prefixed id", () => {
+    const card = normalizeCard(jaBulbasaur, { id: "ja:SV", name: "SV" }, "ja");
+    expect(buildSnapshotRows(card, ["normal", "reverse"], "2026-11-22")).toEqual([
+      { card_id: "ja:SV2a-001", variant: "normal", date: "2026-11-22", tcgplayer_market_usd: null, cardmarket_trend_eur: 0.02 },
+      { card_id: "ja:SV2a-001", variant: "reverse", date: "2026-11-22", tcgplayer_market_usd: null, cardmarket_trend_eur: 8.33 },
+    ]);
   });
 });

@@ -4,6 +4,11 @@ import {
   baseCharizard,
   bulbasaur,
   charizardEx,
+  jaBulbasaur,
+  jaPikachuCards,
+  jaSerieDetails,
+  jaSetDetailSV2a,
+  jaSetOrder,
   searchPage,
   serieDetails,
   setDetail151,
@@ -14,8 +19,11 @@ import {
   excludedSetIds,
   isExcludedCard,
   normalizeCard,
+  normalizeCardSummary,
   normalizeFx,
+  normalizePrices,
   normalizeSet,
+  normalizeSerie,
   setIdFromCardId,
 } from "./normalize";
 
@@ -173,5 +181,92 @@ describe("normalizeFx", () => {
       usdCad: 1.4,
       date: "2026-11-20",
     });
+  });
+});
+
+describe("Japanese normalisation (ja: prefixed ids)", () => {
+  const jaSv = { id: "ja:SV", name: "ポケモンカードゲーム スカーレット&バイオレット" };
+
+  it("prefixes card, set and serie ids and drops TCGPlayer prices", () => {
+    const c = normalizeCard(jaBulbasaur, jaSv, "ja");
+    expect(c).toMatchObject({
+      id: "ja:SV2a-001",
+      localId: "001",
+      name: "フシギダネ",
+      image: "https://assets.tcgdex.net/ja/SV/SV2a/001",
+      rarity: "Common",
+      setId: "ja:SV2a",
+      setName: "ポケモンカード151",
+      setOfficialCount: 165,
+      setTotalCount: 210,
+      serieId: "ja:SV",
+      variants: ["normal", "reverse"],
+    });
+    expect(c.prices.tcgplayer).toBeUndefined();
+    expect(c.prices.cardmarket?.normal.trend).toBe(0.02);
+    expect(c.prices.cardmarket?.holo?.trend).toBe(8.33);
+    // An unprefixed serie ref is prefixed too; prefixing is idempotent.
+    expect(normalizeCard(jaBulbasaur, { id: "SV", name: "x" }, "ja").serieId).toBe("ja:SV");
+    expect(normalizeCardSummary({ ...jaPikachuCards[0], id: "ja:SV-P-001" }, "ja").id).toBe("ja:SV-P-001");
+  });
+
+  it("ignores a Japanese tcgplayer block even if TCGdex sends one", () => {
+    const pricing = { tcgplayer: { updated: "x", normal: { marketPrice: 1 } }, cardmarket: null };
+    expect(normalizePrices(pricing, "ja")).toEqual({});
+    expect(normalizePrices(pricing, "en").tcgplayer?.variants.normal?.market).toBe(1);
+  });
+
+  it("English stays unprefixed", () => {
+    const c = normalizeCard(bulbasaur, sv);
+    expect(c.id).toBe("sv03.5-001");
+    expect(c.setId).toBe("sv03.5");
+    expect(c.serieId).toBe("sv");
+  });
+
+  it("prefixes set details and their cards", () => {
+    const s = normalizeSet(jaSetDetailSV2a, "ja");
+    expect(s.id).toBe("ja:SV2a");
+    expect(s.serieId).toBe("ja:SV");
+    expect(s.releaseDate).toBe("2023-06-16");
+    expect(s.cards.map((c) => c.id)).toEqual(["ja:SV2a-001", "ja:SV2a-002"]);
+  });
+
+  it("prefixes series and their set ids", () => {
+    const serie = normalizeSerie(jaSerieDetails[0], "ja");
+    expect(serie.id).toBe("ja:SV");
+    expect(serie.setIds).toEqual(["ja:SV-P", "ja:SV2a", "ja:SV1V"]);
+  });
+
+  it("derives prefixed set ids from prefixed card ids", () => {
+    expect(setIdFromCardId("ja:SV2a-001", "001")).toBe("ja:SV2a");
+    expect(setIdFromCardId("ja:SV-P-001", "001")).toBe("ja:SV-P");
+    expect(setIdFromCardId("ja:M-P-012", "012")).toBe("ja:M-P");
+  });
+
+  it("builds a prefixed serie index ordered by release date", () => {
+    const idx = buildSerieIndex(jaSerieDetails, "ja", jaSetOrder);
+    expect(idx.series.map((s) => s.id)).toEqual(["ja:M", "ja:SV"]);
+    // Ranked sets newest first; the undated SV-P goes last.
+    expect(idx.sets.map((s) => s.id)).toEqual(["ja:M2", "ja:M1L", "ja:SV2a", "ja:SV1V", "ja:SV-P"]);
+    expect(idx.sets.every((s) => s.serieId.startsWith("ja:"))).toBe(true);
+    // Serie.setIds in release order (oldest first), unranked first.
+    expect(idx.series[1].setIds).toEqual(["ja:SV-P", "ja:SV1V", "ja:SV2a"]);
+    expect(idx.series[0].setIds).toEqual(["ja:M1L", "ja:M2"]);
+    expect(idx.setToSerie.get("ja:SV2a")).toEqual({ id: "ja:SV", name: jaSerieDetails[0].name });
+    expect(idx.setToSerie.has("SV2a")).toBe(false);
+  });
+
+  it("without a set order, keeps the serie-based order", () => {
+    const idx = buildSerieIndex(jaSerieDetails, "ja");
+    expect(idx.sets.map((s) => s.id)).toEqual(["ja:M1L", "ja:M2", "ja:SV1V", "ja:SV2a", "ja:SV-P"]);
+  });
+
+  it("exclusion is harmless for Japanese (no TCG Pocket serie)", () => {
+    const excluded = excludedSetIds(jaSerieDetails, "ja");
+    expect(excluded.size).toBe(0);
+    expect(jaPikachuCards.filter((c) => isExcludedCard(c, excluded, "ja"))).toEqual([]);
+    // Prefixed exclusion set ids are matched against prefixed card ids.
+    expect(isExcludedCard(jaPikachuCards[1], new Set(["ja:SV1V"]), "ja")).toBe(true);
+    expect(isExcludedCard(jaPikachuCards[1], new Set(["SV1V"]), "ja")).toBe(false);
   });
 });

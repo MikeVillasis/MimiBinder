@@ -5,6 +5,7 @@ import type {
   CardPrices,
   CardSummary,
   FxRate,
+  Lang,
   Serie,
   SetDetail,
   SetSummary,
@@ -22,8 +23,12 @@ import type {
   RawTcgplayerVariant,
   RawValet,
 } from "./raw";
+import { joinId } from "../lang";
 
-/** TCG Pocket is a digital game; its series is hidden everywhere. */
+/**
+ * TCG Pocket is a digital game; its series is hidden everywhere. Matched against raw TCGdex
+ * serie ids of any language (Japanese has no Pocket series, so nothing is excluded there).
+ */
 export const EXCLUDED_SERIES = new Set(["tcgp"]);
 
 /** Variant → TCGPlayer price keys, in preference order. */
@@ -64,16 +69,23 @@ export function setSymbolUrl(v: string | null | undefined): string | undefined {
   return v ? `${v.replace("assets.tcgdex.net/univ/", "assets.tcgdex.net/en/")}.webp` : undefined;
 }
 
-export function normalizeCardSummary(raw: RawCardBrief): CardSummary {
+/**
+ * Raw TCGdex card → summary. With `lang` "ja" the id gets the "ja:" prefix
+ * (idempotent), so every id the app sees is language-qualified.
+ */
+export function normalizeCardSummary(raw: RawCardBrief, lang: Lang = "en"): CardSummary {
   return {
-    id: raw.id,
+    id: joinId(raw.id, lang),
     localId: raw.localId,
     name: raw.name,
     image: cardImageBase(raw.image),
   };
 }
 
-/** Derive the set id from a card id ("sv03.5-199" + localId "199" → "sv03.5"). */
+/**
+ * Derive the set id from a card id ("sv03.5-199" + localId "199" → "sv03.5"). Works on
+ * prefixed ids too ("ja:SV2a-001" → "ja:SV2a"): the prefix is kept.
+ */
 export function setIdFromCardId(id: string, localId: string): string {
   const suffix = `-${localId}`;
   if (id.endsWith(suffix)) return id.slice(0, -suffix.length);
@@ -138,9 +150,10 @@ function normalizeCardmarket(raw: RawCardmarket | null | undefined): CardPrices[
   };
 }
 
-export function normalizePrices(pricing: RawCard["pricing"]): CardPrices {
+/** Japanese cards are never on TCGPlayer, so their `tcgplayer` block is always dropped. */
+export function normalizePrices(pricing: RawCard["pricing"], lang: Lang = "en"): CardPrices {
   const prices: CardPrices = {};
-  const tcgplayer = normalizeTcgplayer(pricing?.tcgplayer);
+  const tcgplayer = lang === "en" ? normalizeTcgplayer(pricing?.tcgplayer) : undefined;
   const cardmarket = normalizeCardmarket(pricing?.cardmarket);
   if (tcgplayer) prices.tcgplayer = tcgplayer;
   if (cardmarket) prices.cardmarket = cardmarket;
@@ -164,41 +177,44 @@ function parseHp(hp: RawCard["hp"]): number | undefined {
   return typeof n === "number" && Number.isFinite(n) ? n : undefined;
 }
 
+/** `serie` is the app-level serie (already prefixed for Japanese, e.g. from the serie index). */
 export function normalizeCard(
   raw: RawCard,
   serie?: { id: string; name: string },
+  lang: Lang = "en",
 ): CardDetail {
   const set = raw.set;
   return {
-    ...normalizeCardSummary(raw),
+    ...normalizeCardSummary(raw, lang),
     rarity: opt(raw.rarity),
     illustrator: opt(raw.illustrator),
     hp: parseHp(raw.hp),
     types: raw.types?.length ? raw.types : undefined,
-    setId: set.id,
+    setId: joinId(set.id, lang),
     setName: set.name,
     setLogo: setLogoUrl(set.logo),
     setSymbol: setSymbolUrl(set.symbol),
     setOfficialCount: set.cardCount?.official ?? undefined,
     setTotalCount: set.cardCount?.total ?? undefined,
-    serieId: serie?.id,
+    serieId: serie ? joinId(serie.id, lang) : undefined,
     serieName: serie?.name,
     variants: normalizeVariants(raw),
-    prices: normalizePrices(raw.pricing),
+    prices: normalizePrices(raw.pricing, lang),
   };
 }
 
 export function normalizeSetSummary(
   raw: RawSetBrief & { releaseDate?: string | null },
   serie: { id: string; name: string },
+  lang: Lang = "en",
 ): SetSummary {
   const official = raw.cardCount?.official ?? raw.cardCount?.total ?? 0;
   return {
-    id: raw.id,
+    id: joinId(raw.id, lang),
     name: raw.name,
     logo: setLogoUrl(raw.logo),
     symbol: setSymbolUrl(raw.symbol),
-    serieId: serie.id,
+    serieId: joinId(serie.id, lang),
     serieName: serie.name,
     releaseDate: opt(raw.releaseDate),
     officialCount: official,
@@ -206,20 +222,20 @@ export function normalizeSetSummary(
   };
 }
 
-export function normalizeSet(raw: RawSet): SetDetail {
+export function normalizeSet(raw: RawSet, lang: Lang = "en"): SetDetail {
   const serie = raw.serie ?? { id: "unknown", name: "Unknown" };
   return {
-    ...normalizeSetSummary(raw, serie),
-    cards: (raw.cards ?? []).map(normalizeCardSummary),
+    ...normalizeSetSummary(raw, serie, lang),
+    cards: (raw.cards ?? []).map((c) => normalizeCardSummary(c, lang)),
   };
 }
 
-export function normalizeSerie(raw: RawSerie): Serie {
+export function normalizeSerie(raw: RawSerie, lang: Lang = "en"): Serie {
   return {
-    id: raw.id,
+    id: joinId(raw.id, lang),
     name: raw.name,
     logo: setLogoUrl(raw.logo),
-    setIds: (raw.sets ?? []).map((s) => s.id),
+    setIds: (raw.sets ?? []).map((s) => joinId(s.id, lang)),
   };
 }
 
@@ -229,12 +245,24 @@ export interface SerieIndex {
   series: Serie[];
   /** Newest first: series newest first, sets within a serie in reverse release order. */
   sets: SetSummary[];
-  /** setId → serie. */
+  /** App set id (prefixed for Japanese) → app serie (prefixed id). */
   setToSerie: Map<string, { id: string; name: string }>;
 }
 
-/** Build the serie index from serie details (in any order). Excluded series are dropped. */
-export function buildSerieIndex(details: RawSerie[]): SerieIndex {
+/**
+ * Build the serie index from serie details (in any order). Excluded series are dropped.
+ *
+ * `setOrder` (raw set ids, newest first) overrides the order TCGdex lists sets in. Japanese
+ * series list their sets out of release order, so for "ja" the client passes the order of
+ * `/sets?sort:field=releaseDate&sort:order=DESC`; `sets` is then newest first across all
+ * series and each `Serie.setIds` is in release order (oldest first). Sets missing from
+ * `setOrder` keep their serie-based position after the ranked ones.
+ */
+export function buildSerieIndex(
+  details: RawSerie[],
+  lang: Lang = "en",
+  setOrder?: readonly string[],
+): SerieIndex {
   const kept = details
     .filter((s) => !EXCLUDED_SERIES.has(s.id))
     .map((s, i) => ({ s, i }))
@@ -247,34 +275,54 @@ export function buildSerieIndex(details: RawSerie[]): SerieIndex {
     })
     .map(({ s }) => s);
 
+  const rank = setOrder?.length ? new Map(setOrder.map((id, i) => [id, i])) : null;
+  const byRank = (a: string, b: string) =>
+    (rank!.get(a) ?? Number.MAX_SAFE_INTEGER) - (rank!.get(b) ?? Number.MAX_SAFE_INTEGER);
+
   const setToSerie = new Map<string, { id: string; name: string }>();
-  const sets: SetSummary[] = [];
+  const entries: { rawId: string; summary: SetSummary }[] = [];
   for (const s of kept) {
-    const ref = { id: s.id, name: s.name };
+    const ref = { id: joinId(s.id, lang), name: s.name };
     const serieSets = s.sets ?? [];
     for (let i = serieSets.length - 1; i >= 0; i--) {
       const set = serieSets[i];
-      if (setToSerie.has(set.id)) continue;
-      setToSerie.set(set.id, ref);
-      sets.push(normalizeSetSummary(set, ref));
+      const id = joinId(set.id, lang);
+      if (setToSerie.has(id)) continue;
+      setToSerie.set(id, ref);
+      entries.push({ rawId: set.id, summary: normalizeSetSummary(set, s, lang) });
     }
   }
-  return { series: kept.map(normalizeSerie), sets, setToSerie };
+  // Array.prototype.sort is stable, so unranked sets keep their serie-based order.
+  if (rank) entries.sort((a, b) => byRank(a.rawId, b.rawId));
+
+  const series = kept.map((s) => {
+    const serie = normalizeSerie(s, lang);
+    if (!rank) return serie;
+    const raw = (s.sets ?? []).map((x) => x.id);
+    // Release order (oldest first); unranked sets go first, keeping their TCGdex order.
+    const sorted = [...raw].reverse().sort(byRank).reverse();
+    return { ...serie, setIds: sorted.map((id) => joinId(id, lang)) };
+  });
+  return { series, sets: entries.map((e) => e.summary), setToSerie };
 }
 
-/** Serie ids that must be hidden, as a predicate over a set id (needs the full index). */
-export function excludedSetIds(details: RawSerie[]): Set<string> {
+/** App set ids (prefixed for Japanese) of excluded series (needs the full index). */
+export function excludedSetIds(details: RawSerie[], lang: Lang = "en"): Set<string> {
   const out = new Set<string>();
   for (const s of details) {
     if (!EXCLUDED_SERIES.has(s.id)) continue;
-    for (const set of s.sets ?? []) out.add(set.id);
+    for (const set of s.sets ?? []) out.add(joinId(set.id, lang));
   }
   return out;
 }
 
-/** True when a search result belongs to an excluded serie. */
-export function isExcludedCard(card: RawCardBrief, excludedSets: Set<string>): boolean {
-  if (excludedSets.has(setIdFromCardId(card.id, card.localId))) return true;
+/** True when a raw search result belongs to an excluded serie. `excludedSets` holds app set ids. */
+export function isExcludedCard(
+  card: RawCardBrief,
+  excludedSets: Set<string>,
+  lang: Lang = "en",
+): boolean {
+  if (excludedSets.has(setIdFromCardId(joinId(card.id, lang), card.localId))) return true;
   return !!card.image && [...EXCLUDED_SERIES].some((s) => card.image!.includes(`/${s}/`));
 }
 

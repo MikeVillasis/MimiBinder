@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { cardImage, convert, FALLBACK_FX, formatMoney, unitPrice } from "./pricing";
+import { cardImage, convert, effectiveSource, FALLBACK_FX, formatMoney, unitPrice } from "./pricing";
 import { normalizeCard } from "./tcgdex/normalize";
-import { baseCharizard, barePromo, bulbasaur, charizardEx } from "./tcgdex/fixtures.test-data";
+import { baseCharizard, barePromo, bulbasaur, charizardEx, jaBulbasaur } from "./tcgdex/fixtures.test-data";
 import type { FxRate } from "./types";
 
 const fx: FxRate = { usdCad: 1.4, eurCad: 1.5, date: "2026-11-20" };
@@ -82,5 +82,26 @@ describe("formatMoney", () => {
   it("formats en-CA", () => {
     expect(formatMoney(1234.5, "CAD")).toBe("$1,234.50");
     expect(formatMoney(1234.5, "USD")).toBe("US$1,234.50");
+  });
+});
+
+describe("Japanese cards", () => {
+  const ja = normalizeCard(jaBulbasaur, { id: "ja:SV", name: "SV" }, "ja");
+
+  it("effectiveSource forces Cardmarket for ja: ids only", () => {
+    expect(effectiveSource("ja:SV2a-001", "tcgplayer")).toBe("cardmarket");
+    expect(effectiveSource("ja:SV2a-001", "cardmarket")).toBe("cardmarket");
+    expect(effectiveSource("sv03.5-001", "tcgplayer")).toBe("tcgplayer");
+    expect(effectiveSource("sv03.5-001", "cardmarket")).toBe("cardmarket");
+  });
+
+  it("unitPrice uses Cardmarket EUR whatever the source setting", () => {
+    expect(unitPrice(ja, "normal", "tcgplayer")).toEqual({ amount: 0.02, currency: "EUR" });
+    expect(unitPrice(ja, "normal", "cardmarket")).toEqual({ amount: 0.02, currency: "EUR" });
+    expect(unitPrice(ja, "reverse", "tcgplayer")).toEqual({ amount: 8.33, currency: "EUR" });
+  });
+
+  it("English cards still honour the tcgplayer setting", () => {
+    expect(unitPrice(normalizeCard(bulbasaur), "normal", "tcgplayer")?.currency).toBe("USD");
   });
 });

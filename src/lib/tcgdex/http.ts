@@ -28,3 +28,17 @@ export function handleError(err: unknown): Response {
   console.error("[api] unexpected error", err);
   return errorResponse(500, "Internal error");
 }
+
+/**
+ * Dynamic route segment → app id. Japanese ids contain ":" ("ja:SV2a-001"); clients send it
+ * URL-encoded ("ja%3ASV2a-001") or plain. Decodes any leftover percent-encoding (ids never
+ * contain a literal "%"), leaving malformed sequences as they are.
+ */
+export function decodeIdParam(param: string): string {
+  if (!param.includes("%")) return param;
+  try {
+    return decodeURIComponent(param);
+  } catch {
+    return param;
+  }
+}

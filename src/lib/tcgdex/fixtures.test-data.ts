@@ -224,3 +224,88 @@ export const searchPage: RawCardBrief[] = [
 export const valet: RawValet = {
   observations: [{ d: "2026-11-20", FXUSDCAD: { v: "1.4325" }, FXEURCAD: { v: "1.5727" } }],
 };
+
+// ---- Japanese (/v2/ja), trimmed from real responses captured 2026-11-22 ----------------
+
+const setSV2a = {
+  cardCount: { official: 165, total: 210 },
+  id: "SV2a",
+  name: "ポケモンカード151",
+};
+
+/** Japanese 151 Bulbasaur: Cardmarket only (tcgplayer null), normal + reverse. */
+export const jaBulbasaur: RawCard = {
+  id: "SV2a-001",
+  localId: "001",
+  name: "フシギダネ",
+  image: "https://assets.tcgdex.net/ja/SV/SV2a/001",
+  rarity: "Common",
+  illustrator: "Yuu Nishida",
+  hp: 70,
+  types: ["Grass"],
+  set: setSV2a,
+  variants: { firstEdition: false, holo: false, normal: true, reverse: true, wPromo: false },
+  pricing: {
+    cardmarket: {
+      updated: "2026-11-21T22:16:19.014Z",
+      unit: "EUR",
+      avg: 1.24,
+      low: 0.02,
+      trend: 0.02,
+      avg1: 0.03,
+      avg7: 0.09,
+      avg30: 0.47,
+      "avg-holo": 5.75,
+      "low-holo": 0.1,
+      "trend-holo": 8.33,
+      "avg1-holo": 1.45,
+      "avg7-holo": 8.87,
+      "avg30-holo": 6.54,
+    },
+    tcgplayer: null,
+  },
+};
+
+export const jaSetDetailSV2a: RawSet = {
+  ...setSV2a,
+  releaseDate: "2023-06-16",
+  serie: { id: "SV", name: "ポケモンカードゲーム スカーレット&バイオレット" },
+  cards: [
+    { id: "SV2a-001", localId: "001", name: "フシギダネ", image: "https://assets.tcgdex.net/ja/SV/SV2a/001" },
+    { id: "SV2a-002", localId: "002", name: "フシギソウ", image: "https://assets.tcgdex.net/ja/SV/SV2a/002" },
+  ],
+};
+
+/** Japanese series: sets are listed out of release order (as TCGdex does). */
+export const jaSerieDetails: RawSerie[] = [
+  {
+    id: "SV",
+    name: "ポケモンカードゲーム スカーレット&バイオレット",
+    releaseDate: "2024-08-30",
+    sets: [
+      { id: "SV-P", name: "スカーレット&バイオレット プロモカード", cardCount: { official: 0, total: 288 } },
+      { id: "SV2a", name: "ポケモンカード151", cardCount: { official: 165, total: 210 } },
+      { id: "SV1V", name: "バイオレットex", cardCount: { official: 78, total: 108 } },
+    ],
+  },
+  {
+    id: "M",
+    name: "ポケモンカードゲーム MEGA",
+    releaseDate: "2025-09-26",
+    sets: [
+      { id: "M2", name: "インフェルノX", cardCount: { official: 80, total: 116 } },
+      { id: "M1L", name: "メガブレイブ", cardCount: { official: 63, total: 92 } },
+    ],
+  },
+];
+
+/** `/ja/sets?sort:field=releaseDate&sort:order=DESC` ids (SV-P is undated, left out). */
+export const jaSetOrder = ["M2", "M1L", "SV2a", "SV1V"];
+
+/** `/ja/cards?dexId=eq:25` (trimmed). */
+export const jaPikachuCards: RawCardBrief[] = [
+  { id: "SV-P-001", localId: "001", name: "ピカチュウ" },
+  { id: "SV1V-024", localId: "024", name: "ピカチュウ" },
+  { id: "M2-030", localId: "030", name: "ピカチュウex", image: "https://assets.tcgdex.net/ja/M/M2/030" },
+  { id: "SV2a-025", localId: "025", name: "ピカチュウ", image: "https://assets.tcgdex.net/ja/SV/SV2a/025" },
+];

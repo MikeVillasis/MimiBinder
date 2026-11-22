@@ -11,7 +11,18 @@ import {
   searchCards,
   TcgdexError,
 } from "./client";
-import { bulbasaur, searchPage, serieDetails, setDetail151, valet } from "./fixtures.test-data";
+import {
+  bulbasaur,
+  jaBulbasaur,
+  jaPikachuCards,
+  jaSerieDetails,
+  jaSetDetailSV2a,
+  jaSetOrder,
+  searchPage,
+  serieDetails,
+  setDetail151,
+  valet,
+} from "./fixtures.test-data";
 
 type Route = (url: URL) => unknown | Response;
 
@@ -30,12 +41,36 @@ function mockFetch(route: Route) {
 
 function tcgdexRoutes(extra: Route = () => undefined): Route {
   return (url) => {
+    if (url.pathname.startsWith("/v2/ja")) return jaRoutes(extra)(url);
     const path = url.pathname.replace("/v2/en", "");
     if (path === "/series") return serieDetails.map(({ id, name }) => ({ id, name }));
     const serie = serieDetails.find((s) => path === `/series/${s.id}`);
     if (serie) return serie;
     return extra(url);
   };
+}
+
+/** Japanese catalog routes; anything else goes to `extra`. */
+function jaRoutes(extra: Route = () => undefined): Route {
+  return (url) => {
+    const path = url.pathname.replace("/v2/ja", "");
+    if (path === "/series") return jaSerieDetails.map(({ id, name }) => ({ id, name }));
+    const serie = jaSerieDetails.find((s) => path === `/series/${s.id}`);
+    if (serie) return serie;
+    if (path === "/sets" && url.searchParams.get("sort:field") === "releaseDate") {
+      return jaSetOrder.map((id) => ({ id, name: id }));
+    }
+    return extra(url);
+  };
+}
+
+/** n Japanese dex-search results for one species, in set SV1V. */
+function jaDexCards(n: number, dex: number) {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `SV1V-${dex}${String(i).padStart(3, "0")}`,
+    localId: `${dex}${String(i).padStart(3, "0")}`,
+    name: "x",
+  }));
 }
 
 beforeEach(() => _resetSerieIndex());
@@ -139,5 +174,124 @@ describe("tcgdex client", () => {
     expect(await fetchFx()).toEqual(FALLBACK_FX);
     mockFetch(() => ({ observations: [] }));
     expect(await fetchFx()).toEqual(FALLBACK_FX);
+  });
+});
+
+describe("tcgdex client: Japanese", () => {
+  it("fetchSets / fetchSeries use the ja API, prefix ids and sort newest first", async () => {
+    const fn = mockFetch(tcgdexRoutes());
+    const sets = await fetchSets("ja");
+    expect(sets.map((s) => s.id)).toEqual(["ja:M2", "ja:M1L", "ja:SV2a", "ja:SV1V", "ja:SV-P"]);
+    expect((await fetchSeries("ja")).map((s) => s.id)).toEqual(["ja:M", "ja:SV"]);
+    const urls = fn.mock.calls.map(([u]) => String(u));
+    expect(urls.every((u) => u.startsWith("https://api.tcgdex.net/v2/ja/"))).toBe(true);
+    // English index is separate
+    expect((await fetchSets())[0].id).toBe("sv03.5");
+  });
+
+  it("the ja index still works when the release-order list fails", async () => {
+    mockFetch(
+      tcgdexRoutes((url) => (url.pathname.endsWith("/v2/ja/sets") ? new Response("x", { status: 500 }) : undefined)),
+    );
+    const sets = await fetchSets("ja");
+    expect(sets).toHaveLength(5);
+  });
+
+  it("fetchCard / fetchSet accept prefixed ids", async () => {
+    const fn = mockFetch(
+      tcgdexRoutes((url) => {
+        if (url.pathname === "/v2/ja/cards/SV2a-001") return jaBulbasaur;
+        if (url.pathname === "/v2/ja/sets/SV2a") return jaSetDetailSV2a;
+        return undefined;
+      }),
+    );
+    const card = await fetchCard("ja:SV2a-001");
+    expect(card).toMatchObject({ id: "ja:SV2a-001", setId: "ja:SV2a", serieId: "ja:SV" });
+    expect(card.prices.tcgplayer).toBeUndefined();
+    expect(card.prices.cardmarket?.normal.trend).toBe(0.02);
+    const set = await fetchSet("ja:SV2a");
+    expect(set.id).toBe("ja:SV2a");
+    expect(set.cards[0].id).toBe("ja:SV2a-001");
+    expect(fn.mock.calls.some(([u]) => String(u).includes("ja%3A"))).toBe(false);
+    await expect(fetchCard("ja:")).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("fetchCards handles mixed English and Japanese ids", async () => {
+    mockFetch(
+      tcgdexRoutes((url) => {
+        if (url.pathname === "/v2/ja/cards/SV2a-001") return jaBulbasaur;
+        if (url.pathname === "/v2/en/cards/sv03.5-001") return bulbasaur;
+        return undefined;
+      }),
+    );
+    const cards = await fetchCards(["sv03.5-001", "ja:SV2a-001", "ja:nope-1"]);
+    expect(cards.map((c) => c.id)).toEqual(["sv03.5-001", "ja:SV2a-001"]);
+  });
+
+  it("searchCards ja + Japanese text uses the ja name search", async () => {
+    const fn = mockFetch(
+      tcgdexRoutes((url) => (url.pathname === "/v2/ja/cards" ? jaPikachuCards : undefined)),
+    );
+    const res = await searchCards("ピカチュウ", 1, "ja");
+    const call = fn.mock.calls.map(([u]) => new URL(String(u))).find((u) => u.pathname === "/v2/ja/cards")!;
+    expect(call.searchParams.get("name")).toBe("ピカチュウ");
+    expect(call.searchParams.get("dexId")).toBeNull();
+    expect(res.cards.map((c) => c.id)).toEqual(jaPikachuCards.map((c) => `ja:${c.id}`));
+    expect(res.hasMore).toBe(false);
+  });
+
+  it("searchCards ja + English name searches by dex number, newest set first", async () => {
+    const fn = mockFetch(
+      tcgdexRoutes((url) =>
+        url.pathname === "/v2/ja/cards" && url.searchParams.get("dexId") === "eq:25"
+          ? jaPikachuCards
+          : undefined,
+      ),
+    );
+    const res = await searchCards("PIKACHU", 1, "ja");
+    const dexCalls = fn.mock.calls
+      .map(([u, init]) => ({ url: new URL(String(u)), init }))
+      .filter(({ url }) => url.pathname === "/v2/ja/cards");
+    expect(dexCalls.map((c) => c.url.searchParams.get("dexId"))).toEqual(["eq:25"]);
+    expect(dexCalls[0].init).toMatchObject({ next: { revalidate: 43200 } });
+    // M2 (newest), SV2a, SV1V, then SV-P (not in the release order)
+    expect(res.cards.map((c) => c.id)).toEqual([
+      "ja:M2-030",
+      "ja:SV2a-025",
+      "ja:SV1V-024",
+      "ja:SV-P-001",
+    ]);
+    expect(res).toMatchObject({ page: 1, hasMore: false });
+  });
+
+  it("searchCards ja: merges + dedupes species and paginates locally at 24", async () => {
+    // "char" → Charmander(4), Charmeleon(5), Charizard(6), ...
+    mockFetch(
+      tcgdexRoutes((url) => {
+        if (url.pathname !== "/v2/ja/cards") return undefined;
+        const dex = Number(url.searchParams.get("dexId")?.replace("eq:", ""));
+        if (dex === 4) return jaDexCards(20, 4);
+        if (dex === 5) return [...jaDexCards(10, 5), jaDexCards(1, 4)[0]]; // duplicate of a dex 4 card
+        if (dex === 6) return jaDexCards(10, 6);
+        return [];
+      }),
+    );
+    const p1 = await searchCards("char", 1, "ja");
+    const p2 = await searchCards("char", 2, "ja");
+    expect(p1.cards).toHaveLength(24);
+    expect(p1.hasMore).toBe(true);
+    expect(p2.cards).toHaveLength(16);
+    expect(p2.hasMore).toBe(false);
+    const all = [...p1.cards, ...p2.cards].map((c) => c.id);
+    expect(new Set(all).size).toBe(40);
+    expect(all.every((id) => id.startsWith("ja:SV1V-"))).toBe(true);
+    expect((await searchCards("char", 3, "ja")).cards).toEqual([]);
+  });
+
+  it("searchCards ja: no species match or empty query → no card request", async () => {
+    const fn = mockFetch(tcgdexRoutes());
+    expect(await searchCards("zzzz", 1, "ja")).toEqual({ cards: [], page: 1, hasMore: false });
+    expect(await searchCards("  ", 1, "ja")).toEqual({ cards: [], page: 1, hasMore: false });
+    expect(fn.mock.calls.some(([u]) => String(u).includes("/cards"))).toBe(false);
   });
 });

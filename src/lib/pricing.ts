@@ -7,6 +7,7 @@ import type {
   PriceSource,
   Variant,
 } from "./types";
+import { langOf } from "./lang";
 
 export type SourceCurrency = "USD" | "EUR";
 
@@ -30,7 +31,16 @@ function hasCardmarketValue(p: CardmarketPrice | undefined): p is CardmarketPric
 }
 
 /**
+ * The price source actually used for a card. Japanese cards are not sold on TCGPlayer, so
+ * they are always priced from Cardmarket whatever the user's setting is.
+ */
+export function effectiveSource(cardId: string, source: PriceSource): PriceSource {
+  return langOf(cardId) === "ja" ? "cardmarket" : source;
+}
+
+/**
  * Price of one copy in the source's own currency, or null when unknown.
+ * `source` goes through `effectiveSource`, so Japanese cards always use Cardmarket.
  * - tcgplayer: the variant's market price, falling back to mid.
  * - cardmarket: the "-holo" block for reverse (and for holo when the card also has a
  *   non-holo printing, i.e. the main block describes the non-holo card); otherwise the
@@ -41,7 +51,7 @@ export function unitPrice(
   variant: Variant,
   source: PriceSource,
 ): { amount: number; currency: SourceCurrency } | null {
-  if (source === "tcgplayer") {
+  if (effectiveSource(card.id, source) === "tcgplayer") {
     const p = card.prices.tcgplayer?.variants[variant];
     const amount = p?.market ?? p?.mid ?? null;
     return amount != null ? { amount, currency: "USD" } : null;

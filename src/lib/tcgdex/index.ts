@@ -12,5 +12,8 @@ export {
   SEARCH_PAGE_SIZE,
   TcgdexError,
   TCGDEX_BASE,
+  TCGDEX_BASES,
+  type SearchResult,
 } from "./client";
 export { EXCLUDED_SERIES, TCGPLAYER_KEYS } from "./normalize";
+export { hasJapanese, matchSpecies } from "./species";
