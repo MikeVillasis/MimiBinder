@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { getSeries, getSets } from "@/lib/api-client";
 import { groupBySerie, groupBySet, setCompletion } from "@/lib/collection";
 import { createBinder, useBinders, useEntries } from "@/lib/db";
-import type { SetSummary } from "@/lib/types";
+import { parseLang, splitId } from "@/lib/lang";
+import { LANG_LABELS, type Lang, type SetSummary } from "@/lib/types";
 import { useAsync } from "./hooks";
 import { Button, EmptyState, ErrorState, Segmented, Skeleton, ProgressBar, SetLogo, inputCls } from "./ui";
 
@@ -14,8 +15,21 @@ type Tab = "sets" | "generations" | "custom";
 
 export function BindersView() {
   const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const initial = params.get("tab");
-  const [tab, setTab] = useState<Tab>(initial === "generations" || initial === "custom" ? initial : "sets");
+  const [tab, setTabState] = useState<Tab>(initial === "generations" || initial === "custom" ? initial : "sets");
+  const lang = parseLang(params.get("lang"));
+  const syncUrl = (t: Tab, l: Lang) => {
+    const sp = new URLSearchParams();
+    sp.set("tab", t);
+    if (l !== "en") sp.set("lang", l);
+    router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
+  };
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    syncUrl(t, lang);
+  };
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
@@ -31,11 +45,27 @@ export function BindersView() {
           ]}
         />
       </div>
-      {tab === "sets" && <SetsTab />}
-      {tab === "generations" && <GenerationsTab />}
+      {tab !== "custom" && (
+        <div className="mb-4">
+          <Segmented<Lang>
+            label="Card language"
+            value={lang}
+            onChange={(l) => syncUrl(tab, l)}
+            options={(["en", "ja"] as Lang[]).map((l) => ({ value: l, label: LANG_LABELS[l] }))}
+          />
+        </div>
+      )}
+      {tab === "sets" && <SetsTab lang={lang} />}
+      {tab === "generations" && <GenerationsTab lang={lang} />}
       {tab === "custom" && <CustomTab />}
     </div>
   );
+}
+
+/** Japanese sets show their set code (e.g. "SV2a") instead of useless initials. */
+function fallback(setId: string): string | undefined {
+  const { lang, raw } = splitId(setId);
+  return lang === "ja" ? raw : undefined;
 }
 
 function SetRow({ set, owned, c }: { set: SetSummary; owned: boolean; c?: ReturnType<typeof setCompletion> }) {
@@ -44,10 +74,10 @@ function SetRow({ set, owned, c }: { set: SetSummary; owned: boolean; c?: Return
       href={`/binders/set/${encodeURIComponent(set.id)}`}
       className="flex min-h-16 items-center gap-3 rounded-2xl border border-line bg-surface p-3 hover:border-accent/50"
     >
-      <SetLogo name={set.name} logo={set.logo} symbol={set.symbol} />
+      <SetLogo name={set.name} logo={set.logo} symbol={set.symbol} fallbackText={fallback(set.id)} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-sm font-bold">{set.name}</span>
+          <span className="min-w-0 truncate text-sm font-bold">{set.name}</span>
           <span className="shrink-0 text-xs tabular-nums text-muted">
             {owned && c ? `${c.owned}/${c.total}${c.secret ? ` +${c.secret}` : ""}` : `${set.officialCount} cards`}
           </span>
@@ -62,9 +92,9 @@ function SetRow({ set, owned, c }: { set: SetSummary; owned: boolean; c?: Return
   );
 }
 
-function SetsTab() {
+function SetsTab({ lang }: { lang: Lang }) {
   const entries = useEntries();
-  const { data: sets, error, loading, retry } = useAsync(() => getSets(), "sets");
+  const { data: sets, error, loading, retry } = useAsync(() => getSets(lang), `sets:${lang}`);
   const [q, setQ] = useState("");
   const [ownedOnly, setOwnedOnly] = useState(false);
   const grouped = useMemo(() => groupBySet(entries ?? []), [entries]);
@@ -72,7 +102,10 @@ function SetsTab() {
   if (loading) return <ListSkeleton />;
   if (error || !sets) return <ErrorState message={error ?? "Could not load sets."} onRetry={retry} />;
 
-  const filtered = sets.filter((s) => (!ownedOnly || grouped.has(s.id)) && s.name.toLowerCase().includes(q.trim().toLowerCase()));
+  const needle = q.trim().toLowerCase();
+  const filtered = sets.filter(
+    (s) => (!ownedOnly || grouped.has(s.id)) && (s.name.toLowerCase().includes(needle) || splitId(s.id).raw.toLowerCase().includes(needle)),
+  );
   return (
     <div>
       <div className="mb-4 flex gap-2">
@@ -94,9 +127,9 @@ function SetsTab() {
   );
 }
 
-function GenerationsTab() {
+function GenerationsTab({ lang }: { lang: Lang }) {
   const entries = useEntries();
-  const { data: series, error, loading, retry } = useAsync(() => getSeries(), "series");
+  const { data: series, error, loading, retry } = useAsync(() => getSeries(lang), `series:${lang}`);
   const grouped = useMemo(() => groupBySerie(entries ?? []), [entries]);
   if (loading) return <ListSkeleton />;
   if (error || !series) return <ErrorState message={error ?? "Could not load generations."} onRetry={retry} />;
@@ -111,7 +144,7 @@ function GenerationsTab() {
             href={`/binders/serie/${encodeURIComponent(s.id)}`}
             className="flex min-h-16 items-center gap-3 rounded-2xl border border-line bg-surface p-3 hover:border-accent/50"
           >
-            <SetLogo name={s.name} logo={s.logo} />
+            <SetLogo name={s.name} logo={s.logo} fallbackText={fallback(s.id)} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-bold">{s.name}</div>
               <div className="text-xs text-muted">

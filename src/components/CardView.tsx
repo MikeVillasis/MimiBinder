@@ -6,6 +6,7 @@ import { hasInAppHistory } from "./navHistory";
 import { useCallback, useEffect, useState } from "react";
 import { getCard } from "@/lib/api-client";
 import { getCachedCards, putCachedCards, useEntries } from "@/lib/db";
+import { langOf } from "@/lib/lang";
 import type { CardDetail } from "@/lib/types";
 import { CONDITION_LABELS, VARIANT_LABELS } from "@/lib/types";
 import { AddToCollectionSheet } from "./AddToCollectionSheet";
@@ -13,7 +14,7 @@ import { CardImage } from "./CardImage";
 import { openCardInspector } from "./CardInspector";
 import { PriceHistoryChart } from "./PriceHistoryChart";
 import { PriceTable } from "./PriceTable";
-import { Badge, Button, ErrorState, Sheet, Skeleton } from "./ui";
+import { Badge, Button, LangBadge, ErrorState, Sheet, Skeleton } from "./ui";
 
 export function CardView({ id }: { id: string }) {
   const router = useRouter();
@@ -107,7 +108,10 @@ export function CardView({ id }: { id: string }) {
 
         <div className="flex min-w-0 flex-col gap-4">
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl">{card.name}</h1>
+            <h1 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xl font-extrabold tracking-tight md:text-3xl">
+              <span className="min-w-0 break-words">{card.name}</span>
+              {langOf(card.id) === "ja" && <LangBadge className="shadow-none" />}
+            </h1>
             <p className="mt-1 text-sm text-muted">
               <Link href={`/binders/set/${encodeURIComponent(card.setId)}`} className="-my-3 inline-flex min-h-11 items-center align-middle text-fg underline decoration-line underline-offset-2 hover:decoration-accent">
                 {card.setName}

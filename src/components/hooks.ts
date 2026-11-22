@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { getFx } from "@/lib/api-client";
-import { convert, formatMoney, unitPrice } from "@/lib/pricing";
+import { convert, effectiveSource, formatMoney, unitPrice } from "@/lib/pricing";
 import { useSettings } from "@/lib/db";
 import type { CardDetail, CollectionEntry, Currency, FxRate, Settings } from "@/lib/types";
 
@@ -88,7 +88,7 @@ export function entryValue(
 ): number | null {
   const card = cards?.get(e.cardId);
   if (!card) return null;
-  const p = unitPrice(card, e.variant, settings.priceSource);
+  const p = unitPrice(card, e.variant, effectiveSource(e.cardId, settings.priceSource));
   if (!p) return null;
   if (p.currency !== settings.currency && !fx) return null;
   const unit = p.currency === settings.currency ? p.amount : convert(p.amount, p.currency, settings.currency, fx!);

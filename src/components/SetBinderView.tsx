@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { getSet } from "@/lib/api-client";
 import { setCompletion } from "@/lib/collection";
 import { useEntries } from "@/lib/db";
+import { langOf, splitId } from "@/lib/lang";
 import { CardTile, QtyBadge } from "./CardTile";
 import { useAsync } from "./hooks";
 import { CardGridSkeleton, ErrorState, ProgressBar, Segmented, Skeleton } from "./ui";
@@ -12,7 +13,7 @@ import { CardGridSkeleton, ErrorState, ProgressBar, Segmented, Skeleton } from "
 type Show = "all" | "owned" | "missing";
 
 export function SetBinderView({ setId }: { setId: string }) {
-  const { data: set, error, loading, retry } = useAsync(() => getSet(setId), setId);
+  const { data: set, error, loading, retry } = useAsync(() => getSet(setId), `${langOf(setId)}:${setId}`);
   const entries = useEntries();
   const [show, setShow] = useState<Show>("all");
 
@@ -37,12 +38,13 @@ export function SetBinderView({ setId }: { setId: string }) {
 
   return (
     <div>
-      <Link href="/binders" className="mb-2 inline-flex min-h-11 items-center text-sm text-muted hover:text-fg">
+      <Link href={langOf(setId) === "ja" ? "/binders?tab=sets&lang=ja" : "/binders"} className="mb-2 inline-flex min-h-11 items-center text-sm text-muted hover:text-fg">
         ← Binders
       </Link>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-extrabold tracking-tight md:text-3xl">{set.name}</h1>
+          {langOf(setId) === "ja" && <p className="text-xs font-semibold tracking-wide text-muted">Set code {splitId(setId).raw}</p>}
           <p className="text-sm text-muted">
             {set.serieName}
             {set.releaseDate ? ` · ${set.releaseDate}` : ""}

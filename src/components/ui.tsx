@@ -256,6 +256,19 @@ export function Badge({ children, tone = "neutral" }: { children: ReactNode; ton
   );
 }
 
+/** Small "JP" marker for Japanese cards. Opaque so it stays legible on top of card art. */
+export function LangBadge({ className }: { className?: string }) {
+  return (
+    <span
+      title="Japanese card"
+      aria-label="Japanese card"
+      className={cx("inline-flex items-center rounded-md border border-line bg-surface px-1.5 py-0.5 text-xs font-bold leading-none text-fg shadow", className)}
+    >
+      JP
+    </span>
+  );
+}
+
 export function Stat({ label, value, tone, sub }: { label: string; value: ReactNode; tone?: "good" | "bad"; sub?: ReactNode }) {
   return (
     <div className="rounded-2xl border border-line bg-surface p-4">
@@ -281,7 +294,20 @@ export function setInitials(name: string): string {
  * has no image (common for the newest sets) and when an image fails to load.
  * Sized by the parent: pass a `size` box class such as "h-10 w-14".
  */
-export function SetLogo({ name, logo, symbol, className = "h-10 w-14" }: { name: string; logo?: string; symbol?: string; className?: string }) {
+export function SetLogo({
+  name,
+  logo,
+  symbol,
+  fallbackText,
+  className = "h-10 w-14",
+}: {
+  name: string;
+  logo?: string;
+  symbol?: string;
+  /** Text shown when there is no image, instead of initials (e.g. the set code of a Japanese set). */
+  fallbackText?: string;
+  className?: string;
+}) {
   const [failed, setFailed] = useState<string[]>([]);
   const src = [logo, symbol].find((u): u is string => !!u && !failed.includes(u));
   return (
@@ -299,9 +325,12 @@ export function SetLogo({ name, logo, symbol, className = "h-10 w-14" }: { name:
       ) : (
         <span
           aria-hidden="true"
-          className="flex h-full max-h-10 w-full max-w-14 items-center justify-center rounded-lg border border-line bg-surface-2 text-xs font-extrabold tracking-wide text-muted"
+          className={cx(
+            "flex h-full max-h-10 w-full max-w-14 items-center justify-center overflow-hidden rounded-lg border border-line bg-surface-2 font-extrabold text-muted",
+            fallbackText && fallbackText.length > 3 ? "px-0.5 text-xs tracking-tight" : "text-xs tracking-wide",
+          )}
         >
-          {setInitials(name)}
+          {fallbackText ?? setInitials(name)}
         </span>
       )}
     </div>

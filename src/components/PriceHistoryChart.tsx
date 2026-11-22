@@ -6,6 +6,7 @@ import { getPriceHistory } from "@/lib/api-client";
 import { useEntries } from "@/lib/db";
 import { useAuth } from "@/lib/sync";
 import { VARIANT_LABELS, type CardDetail, type PriceSnapshot, type Variant } from "@/lib/types";
+import { effectiveSource } from "@/lib/pricing";
 import { useAsync, useMoney } from "./hooks";
 import { Segmented, Skeleton } from "./ui";
 
@@ -57,6 +58,7 @@ export function PriceHistoryChart({ card }: { card: CardDetail }) {
   const ownsCard = (entries ?? []).some((e) => e.cardId === cardId);
   const { data, loading, error } = useAsync<PriceSnapshot[]>(() => getPriceHistory(cardId), cardId);
   const { settings, to, fmt } = useMoney();
+  const source = effectiveSource(cardId, settings.priceSource);
   const [picked, setPicked] = useState<Variant>();
 
   const present = useMemo(() => {
@@ -71,11 +73,11 @@ export function PriceHistoryChart({ card }: { card: CardDetail }) {
       .filter((s) => s.variant === variant)
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((s) => {
-        const raw = settings.priceSource === "tcgplayer" ? s.tcgplayerMarketUsd : s.cardmarketTrendEur;
-        const cur = settings.priceSource === "tcgplayer" ? "USD" : "EUR";
+        const raw = source === "tcgplayer" ? s.tcgplayerMarketUsd : s.cardmarketTrendEur;
+        const cur = source === "tcgplayer" ? "USD" : "EUR";
         return { date: s.date, value: raw == null ? null : to(raw, cur) };
       });
-  }, [data, variant, settings.priceSource, to]);
+  }, [data, variant, source, to]);
 
   return (
     <section className="rounded-2xl border border-line bg-surface p-4" aria-labelledby="hist-h">
@@ -134,7 +136,7 @@ export function PriceHistoryChart({ card }: { card: CardDetail }) {
         <TrendFallback card={card} variant={variant ?? variants[0] ?? "normal"} />
       )}
       <p className="mt-2 text-xs text-muted">
-        {settings.priceSource === "tcgplayer" ? "TCGPlayer market (USD)" : "Cardmarket trend (EUR)"} converted at today&apos;s rate.
+        {source === "tcgplayer" ? "TCGPlayer market (USD)" : "Cardmarket trend (EUR)"} converted at today&apos;s rate.
       </p>
     </section>
   );

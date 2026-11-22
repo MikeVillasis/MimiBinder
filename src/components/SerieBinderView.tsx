@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { getSeries, getSets } from "@/lib/api-client";
 import { setCompletion } from "@/lib/collection";
 import { useEntries } from "@/lib/db";
+import { langOf, splitId } from "@/lib/lang";
 import type { CollectionEntry } from "@/lib/types";
 import { CardTile, QtyBadge } from "./CardTile";
 import { localIdNum, useAsync } from "./hooks";
@@ -12,9 +13,10 @@ import { CardGridSkeleton, EmptyState, ErrorState, ProgressBar } from "./ui";
 
 export function SerieBinderView({ serieId }: { serieId: string }) {
   const { data, error, loading, retry } = useAsync(async () => {
-    const [series, sets] = await Promise.all([getSeries(), getSets()]);
+    const lang = langOf(serieId);
+    const [series, sets] = await Promise.all([getSeries(lang), getSets(lang)]);
     return { serie: series.find((s) => s.id === serieId), sets: sets.filter((s) => s.serieId === serieId) };
-  }, serieId);
+  }, `${langOf(serieId)}:${serieId}`);
   const entries = useEntries();
 
   const bySet = useMemo(() => {
@@ -34,7 +36,7 @@ export function SerieBinderView({ serieId }: { serieId: string }) {
 
   return (
     <div>
-      <Link href="/binders?tab=generations" className="mb-2 inline-flex min-h-11 items-center text-sm text-muted hover:text-fg">
+      <Link href={`/binders?tab=generations${langOf(serieId) === "ja" ? "&lang=ja" : ""}`} className="mb-2 inline-flex min-h-11 items-center text-sm text-muted hover:text-fg">
         ← Binders
       </Link>
       <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl">{serie?.name ?? serieId}</h1>
@@ -62,7 +64,10 @@ export function SerieBinderView({ serieId }: { serieId: string }) {
               <section key={s.id} aria-label={s.name}>
                 <Link href={`/binders/set/${encodeURIComponent(s.id)}`} className="mb-3 block rounded-2xl border border-line bg-surface p-3 hover:border-accent/50">
                   <div className="mb-2 flex items-baseline justify-between gap-2">
-                    <h2 className="truncate text-base font-bold">{s.name}</h2>
+                    <h2 className="min-w-0 truncate text-base font-bold">
+                      {s.name}
+                      {langOf(s.id) === "ja" && <span className="ml-2 text-xs font-semibold text-muted">{splitId(s.id).raw}</span>}
+                    </h2>
                     <span className="shrink-0 text-xs tabular-nums text-muted">
                       {c.owned}/{c.total} · {Math.round(c.percent)}%
                     </span>

@@ -3,7 +3,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { CardImage } from "./CardImage";
+import { langOf } from "@/lib/lang";
 import { cardHref } from "./hooks";
+import { LangBadge } from "./ui";
 
 export function CardTile({
   id,
@@ -27,6 +29,7 @@ export function CardTile({
       <Link href={cardHref(id)} className="relative block rounded-xl transition-transform active:scale-[0.98] md:hover:-translate-y-1" aria-label={`${name}${localId ? ` #${localId}` : ""}`}>
         <CardImage image={image} name={name} dim={dim} className="card-shadow" />
         {badge && <span className="absolute right-1.5 top-1.5">{badge}</span>}
+        {langOf(id) === "ja" && <LangBadge className="absolute left-1.5 top-1.5" />}
       </Link>
       <div className="mt-1.5 min-w-0 px-0.5">
         <div className="truncate text-xs font-semibold">{name}</div>

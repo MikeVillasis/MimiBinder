@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { updateEntry, useBinders, useEntries } from "@/lib/db";
+import { langOf } from "@/lib/lang";
 import { useCollectionPrices } from "@/lib/useCollectionPrices";
 import { CONDITION_LABELS, VARIANT_LABELS, type CollectionEntry, type Condition, type Variant } from "@/lib/types";
 import { CardImage } from "./CardImage";
 import { CardTile, QtyBadge } from "./CardTile";
 import { EntryEditor } from "./EntryEditor";
 import { cardHref, entryCost, entryValue, localIdNum, useMoney } from "./hooks";
-import { Badge, Button, CardGridSkeleton, EmptyState, PageHeader, Segmented, Sheet, Stat, cx, inputCls } from "./ui";
+import { Badge, Button, LangBadge, CardGridSkeleton, EmptyState, PageHeader, Segmented, Sheet, Stat, cx, inputCls } from "./ui";
 
 type Sort = "value" | "name" | "set" | "recent" | "gain";
 type View = "grid" | "list";
@@ -28,6 +29,7 @@ export function CollectionView() {
   const [varF, setVarF] = useState("");
   const [condF, setCondF] = useState("");
   const [binderF, setBinderF] = useState("");
+  const [langF, setLangF] = useState("");
   const [editing, setEditing] = useState<string>();
   const [filtersOpen, setFiltersOpen] = useState(false);
 
@@ -51,7 +53,8 @@ export function CollectionView() {
         (!genF || e.serieId === genF) &&
         (!varF || e.variant === varF) &&
         (!condF || e.condition === condF) &&
-        (!binderF || e.binderIds.includes(binderF)),
+        (!binderF || e.binderIds.includes(binderF)) &&
+        (!langF || langOf(e.cardId) === langF),
     );
     const cmp: Record<Sort, (a: (typeof f)[number], b: (typeof f)[number]) => number> = {
       value: (a, b) => (b.value ?? -1) - (a.value ?? -1),
@@ -61,7 +64,7 @@ export function CollectionView() {
       recent: (a, b) => b.e.createdAt.localeCompare(a.e.createdAt),
     };
     return [...f].sort(cmp[sort]);
-  }, [rows, setF, genF, varF, condF, binderF, sort]);
+  }, [rows, setF, genF, varF, condF, binderF, langF, sort]);
 
   if (entries === undefined) {
     return (
@@ -100,9 +103,14 @@ export function CollectionView() {
     setVarF("");
     setCondF("");
     setBinderF("");
+    setLangF("");
   };
   const labelOf = (opts: (readonly [string, string])[], v: string) => opts.find(([k]) => k === v)?.[1] ?? v;
+  const hasJa = (entries ?? []).some((e) => langOf(e.cardId) === "ja");
   const filterSels = [
+    ...(hasJa || langF
+      ? [{ key: "lang", label: "Language", value: langF, set: setLangF, options: [["en", "English"], ["ja", "Japanese"]] as (readonly [string, string])[] }]
+      : []),
     { key: "set", label: "Set", value: setF, set: setSetF, options: setOptions as (readonly [string, string])[] },
     { key: "gen", label: "Generation", value: genF, set: setGenF, options: genOptions as (readonly [string, string])[] },
     { key: "var", label: "Variant", value: varF, set: setVarF, options: (Object.keys(VARIANT_LABELS) as Variant[]).map((v) => [v, VARIANT_LABELS[v]] as const) },
@@ -243,6 +251,7 @@ export function CollectionView() {
                 <div className="mt-1 flex flex-wrap gap-1">
                   <Badge>{VARIANT_LABELS[e.variant]}</Badge>
                   <Badge>{e.condition}</Badge>
+                  {langOf(e.cardId) === "ja" && <LangBadge className="shadow-none" />}
                 </div>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">

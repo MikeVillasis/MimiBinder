@@ -5,18 +5,26 @@ import { useMemo } from "react";
 import { getSets } from "@/lib/api-client";
 import { groupBySet, setCompletion } from "@/lib/collection";
 import { useEntries } from "@/lib/db";
+import { langOf, splitId } from "@/lib/lang";
 import { useCollectionPrices } from "@/lib/useCollectionPrices";
 import { VARIANT_LABELS } from "@/lib/types";
 import { CardImage } from "./CardImage";
 import { cardHref, entryCost, entryValue, useAsync, useMoney } from "./hooks";
-import { EmptyState, PageHeader, ProgressBar, SetLogo, Skeleton, Stat } from "./ui";
+import { EmptyState, LangBadge, PageHeader, ProgressBar, SetLogo, Skeleton, Stat } from "./ui";
 
 export function DashboardView() {
   const entries = useEntries();
   const { cards, fx: pricedFx, loading } = useCollectionPrices();
   const { settings, fx: fetchedFx, fmtDisplay } = useMoney();
   const fx = pricedFx ?? fetchedFx;
-  const { data: sets } = useAsync(() => getSets(), "sets");
+  const hasJa = (entries ?? []).some((e) => langOf(e.cardId) === "ja");
+  const { data: sets } = useAsync(
+    async () => {
+      const [en, ja] = await Promise.all([getSets(), hasJa ? getSets("ja").catch(() => []) : Promise.resolve([])]);
+      return [...en, ...ja];
+    },
+    hasJa ? "sets:en+ja" : "sets:en",
+  );
 
   const stats = useMemo(() => {
     const list = entries ?? [];
@@ -81,7 +89,10 @@ export function DashboardView() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Home" subtitle={`Prices in ${settings.currency} · ${settings.priceSource === "tcgplayer" ? "TCGPlayer" : "Cardmarket"}`} />
+      <PageHeader
+        title="Home"
+        subtitle={`Prices in ${settings.currency} · ${settings.priceSource === "tcgplayer" ? "TCGPlayer" : "Cardmarket"}${hasJa ? " (Japanese cards: Cardmarket)" : ""}`}
+      />
 
       <section aria-label="Summary" className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div className="col-span-2 rounded-2xl border border-accent/30 p-4" style={{ background: "linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 14%, transparent), color-mix(in srgb, var(--color-brand) 8%, transparent))" }}>
@@ -120,7 +131,10 @@ export function DashboardView() {
                     <CardImage image={e.image} name={e.cardName} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold">{e.cardName}</div>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-sm font-bold">{e.cardName}</span>
+                      {langOf(e.cardId) === "ja" && <LangBadge className="shrink-0" />}
+                    </div>
                     <div className="truncate text-xs text-muted">
                       {e.setName} · {VARIANT_LABELS[e.variant]} ×{e.quantity}
                     </div>
@@ -140,7 +154,10 @@ export function DashboardView() {
         <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
           {stats.recent.map((e) => (
             <Link key={e.id} href={cardHref(e.cardId)} className="w-28 shrink-0 md:w-32" aria-label={e.cardName}>
-              <CardImage image={e.image} name={e.cardName} className="card-shadow" />
+              <div className="relative">
+                <CardImage image={e.image} name={e.cardName} className="card-shadow" />
+                {langOf(e.cardId) === "ja" && <LangBadge className="absolute left-1.5 top-1.5" />}
+              </div>
               <div className="mt-1 truncate text-xs font-semibold">{e.cardName}</div>
             </Link>
           ))}
@@ -161,7 +178,7 @@ export function DashboardView() {
             {completion.map(({ set, c }) => (
               <Link key={set.id} href={`/binders/set/${encodeURIComponent(set.id)}`} className="rounded-2xl border border-line bg-surface p-3 hover:border-accent/50">
                 <div className="flex items-center gap-3">
-                  <SetLogo name={set.name} logo={set.logo} symbol={set.symbol} className="h-9 w-12" />
+                  <SetLogo name={set.name} logo={set.logo} symbol={set.symbol} fallbackText={langOf(set.id) === "ja" ? splitId(set.id).raw : undefined} className="h-9 w-12" />
                   <div className="min-w-0 flex-1">
                     <div className="mb-2 flex items-center justify-between gap-2 text-sm">
                       <span className="truncate font-semibold">{set.name}</span>

@@ -1,6 +1,8 @@
 "use client";
 
 import { VARIANT_LABELS, type CardDetail, type CardmarketPrice, type TcgplayerPrice, type Variant } from "@/lib/types";
+import { langOf } from "@/lib/lang";
+import { effectiveSource } from "@/lib/pricing";
 import { useMoney } from "./hooks";
 
 function Cell({ v, cur }: { v: number | null | undefined; cur: "USD" | "EUR" }) {
@@ -19,13 +21,18 @@ export function PriceTable({ card }: { card: CardDetail }) {
         ...(cm.holo ? [{ label: "Holo / Reverse", p: cm.holo }] : []),
       ]
     : [];
-  const active = settings.priceSource;
+  const isJa = langOf(card.id) === "ja";
+  const active = effectiveSource(card.id, settings.priceSource);
+  const jaNote = isJa && (
+    <p className="text-xs text-muted">Japanese cards are priced from Cardmarket (EUR → {settings.currency}).</p>
+  );
 
   if (!tp && !cm) {
     return (
       <section className="rounded-2xl border border-line bg-surface p-4">
         <h2 className="mb-1 text-base font-bold">Prices</h2>
         <p className="text-sm text-muted">No price data is available for this card.</p>
+        {jaNote && <div className="mt-1">{jaNote}</div>}
       </section>
     );
   }
@@ -35,6 +42,7 @@ export function PriceTable({ card }: { card: CardDetail }) {
       <h2 id="prices-h" className="text-base font-bold">
         Prices <span className="text-xs font-normal text-muted">in {settings.currency}</span>
       </h2>
+      {jaNote}
       {tp && (
         <div className={active === "tcgplayer" ? "" : "opacity-80"}>
           <div className="mb-1 flex items-center justify-between text-xs text-muted">
