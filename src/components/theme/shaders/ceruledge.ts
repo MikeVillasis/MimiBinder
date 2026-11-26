@@ -120,9 +120,9 @@ void main() {
   float dot1 = 1.0 - smoothstep(0.8, 1.8 + 1.6 * hash(sc + 9.1), length(fract(q / 9.0) * 9.0 - 4.5 - so));
   col = mix(col, VIOLET, dot1 * step(0.86, sh) * smoothstep(0.35, 0.7, field) * 0.35 * k);
 
-  // Crystal shards: sparse clusters, drifting slowly (two cells per loop, so it wraps seamlessly).
+  // Crystal shards: sparse clusters swaying gently in place (one sway per loop, so it wraps seamlessly).
   float cell = 110.0;
-  vec2 cq = q / cell + vec2(2.0 * t / 360.0, 0.0);
+  vec2 cq = q / cell + vec2(0.18 * sin(t * W), 0.08 * sin(t * W * 2.0));
   vec2 ci = floor(cq);
   float cluster = smoothstep(0.52, 0.70, vnoise(cq * 0.45 + 4.0)); // continuous (per-cell values showed seams)
   // The 2x2 cells nearest this pixel, so a shard may overhang its own cell.
@@ -152,12 +152,13 @@ void main() {
     col += rainbow(hash(ki + 35.0) + t / 360.0) * star * tw * 0.18 * k;
   }
 
-  // Ghost-flame embers: very rare, rising one cell every 120 s (three per loop).
-  vec2 eq = q / 140.0 + vec2(0.0, -3.0 * t / 360.0);
+  // Ghost-flame embers: very rare, each rising through its own cell and fading, three rises per loop.
+  vec2 eq = q / 140.0;
   vec2 ei = floor(eq);
   if (hash(ei + 51.0) > 0.93) {
-    vec2 ed = (fract(eq) - 0.5) * 140.0 + vec2(8.0 * sin(t * W * 3.0 + hash(ei) * TAU), 0.0);
-    float e = exp(-dot(ed * vec2(1.0, 0.6), ed * vec2(1.0, 0.6)) * 0.05);
+    float ph = fract(3.0 * t / 360.0 + hash(ei + 52.0)); // whole cycles per loop: seamless
+    vec2 ed = (fract(eq) - 0.5) * 140.0 - vec2(8.0 * sin(t * W * 3.0 + hash(ei) * TAU), (ph - 0.5) * 100.0);
+    float e = exp(-dot(ed * vec2(1.0, 0.6), ed * vec2(1.0, 0.6)) * 0.05) * sin(ph * 3.14159);
     col = mix(col, mix(EMBER, PINK, 0.3), e * 0.45 * k);
   }
 
