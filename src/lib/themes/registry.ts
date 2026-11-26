@@ -66,6 +66,16 @@ export const THEMES: ThemeMeta[] = [
     shader: true,
     credit: { card: "Ceruledge ex", set: "Prismatic Evolutions", number: "147/131", artist: "akagi" },
   },
+  {
+    id: "sylveon",
+    name: "Ribbon Prism",
+    mode: "light",
+    description: "Pastel pink harlequin with polka dots, flowing pink and ice-blue ribbons and prismatic gems.",
+    themeColor: "#f8e4eb",
+    swatches: ["#f8e4eb", "#fff8fa", "#a8336a", "#80c4e2", "#f9e699"],
+    shader: true,
+    credit: { card: "Sylveon ex", set: "Prismatic Evolutions", number: "156/131", artist: "Cona Nitanda" },
+  },
 ];
 
 export const DEFAULT_THEME = "default";
