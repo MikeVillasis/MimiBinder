@@ -66,14 +66,6 @@ Decorative motion borrowed from card-game UIs, kept quiet and optional:
   everything is off under `prefers-reduced-motion` and under `html[data-motion="off"]` (Settings › Feel).
 - Primitives: `Switch`, `EmptyState` `art` (e.g. `<CardFan />`), `ProgressBar` `ticks` in `ui.tsx`; `HoloCard`,
   `CountUp`, `NewBadge`, `InspectHint`, `MilestoneBanner`, `Sparkles` in `fun.tsx`.
-- Glitter: `glitterTier()` in `src/lib/fun.ts` picks `none` (commons, uncommons, plain rares, promos), `light`
-  (holo rares, an owned holo copy), `reverse` (an owned reverse holo: specks on the frame, not the art window) or
-  `prismatic` (ultra / illustration / special illustration / hyper / secret rares, Japanese SAR SR AR HR UR CHR CSR
-  SSR, or a number past the set's official count). Owned copies add their printing; set grids only know the number.
-  Pass it to `HoloCard`, `CardTile`, `CardImage` and `openCardInspector` (`glitter`). Pure CSS ("Glitter" block in
-  `globals.css`): fixed speck masks over a light field that slides with `--gx`/`--gy` (mouse on tiles, live
-  rotation in the inspector, a scroll-driven `view()` shift on touch screens). Never on the card back. Calm mode
-  keeps the specks, still.
 - Any number that animates must render the exact formatted value at rest and expose it to screen readers from the
   first frame (`CountUp` does both).
 

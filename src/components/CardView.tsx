@@ -11,7 +11,7 @@ import type { CardDetail, Variant } from "@/lib/types";
 import { CONDITION_LABELS, VARIANT_LABELS } from "@/lib/types";
 import { printingKey, printingLabel } from "@/lib/stamps";
 import { AddToCollectionSheet } from "./AddToCollectionSheet";
-import { foilTier, glitterTier, strongestGlitter } from "@/lib/fun";
+import { foilTier } from "@/lib/fun";
 import { haptic, motionOK } from "@/lib/prefs";
 import { CardBack } from "./CardBack";
 import { CardImage } from "./CardImage";
@@ -108,10 +108,6 @@ export function CardView({ id }: { id: string }) {
   const owned = (entries ?? []).filter((e) => e.cardId === card.id);
   const ownedCount = owned.reduce((n, e) => n + e.quantity, 0);
   const editEntry = owned.find((e) => e.id === editing);
-  // The card's own glitter (a card printed only as holo counts as holo), or more if an owned copy is a holo /
-  // reverse printing.
-  const holoOnly = card.variants.includes("holo") && !card.variants.includes("normal");
-  const glitter = strongestGlitter([glitterTier({ ...card, variant: holoOnly ? "holo" : undefined }), ...owned.map((e) => glitterTier({ ...card, variant: e.variant }))]);
   const source = effectiveSource(card.id, settings.priceSource);
   const headline = headlinePrice(card, source);
   const headlineText = headline ? fmt(headline.amount, headline.currency) : null;
@@ -138,8 +134,8 @@ export function CardView({ id }: { id: string }) {
           <div className="reveal-stage">
             <div className="reveal-card" data-reveal={revealing ? "" : undefined}>
               <button type="button" onClick={() => setZoom(true)} aria-label={`Zoom ${card.name}`} className="reveal-front block w-full cursor-zoom-in rounded-[6%/4.5%]">
-                <HoloCard tier={foilTier(card.rarity)} glitter={glitter} maxTilt={10} sweep>
-                  <CardImage image={card.image} name={card.name} quality="high" glitter={glitter} className="card-shadow" />
+                <HoloCard tier={foilTier(card.rarity)} maxTilt={10} sweep>
+                  <CardImage image={card.image} name={card.name} quality="high" className="card-shadow" />
                 </HoloCard>
                 {revealing && (
                   <span className="holo-fx" aria-hidden="true">
@@ -156,7 +152,7 @@ export function CardView({ id }: { id: string }) {
             {revealing && <Sparkles count={14} spread={150} />}
           </div>
           <div className="mt-4 flex items-center justify-center gap-2">
-            <Button variant="secondary" size="sm" pill icon={<InspectIcon />} className="elev-0" onClick={() => openCardInspector({ image: card.image, name: card.name, glitter })}>
+            <Button variant="secondary" size="sm" pill icon={<InspectIcon />} className="elev-0" onClick={() => openCardInspector({ image: card.image, name: card.name })}>
               Inspect
             </Button>
             <Link href={`/centering?card=${encodeURIComponent(card.id)}`} className={cx(buttonCls({ variant: "secondary", size: "sm", pill: true }), "elev-0")}>
@@ -274,7 +270,7 @@ export function CardView({ id }: { id: string }) {
       )}
       {editEntry && <EntryEditor key={editEntry.id} entry={editEntry} onClose={() => setEditing(undefined)} />}
       <Sheet open={zoom} onClose={() => setZoom(false)} title={card.name}>
-        <CardImage image={card.image} name={card.name} quality="high" glitter={glitter} className="mx-auto max-w-sm" />
+        <CardImage image={card.image} name={card.name} quality="high" className="mx-auto max-w-sm" />
       </Sheet>
     </div>
   );

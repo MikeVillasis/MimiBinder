@@ -5,8 +5,6 @@ import { createPortal } from "react-dom";
 import { useBackToClose } from "./useBackToClose";
 import { cardImage } from "@/lib/pricing";
 import { CardBack } from "./CardBack";
-import { Glitter } from "./Glitter";
-import type { GlitterTier } from "@/lib/fun";
 
 /**
  * Full-screen 3D card inspector. Open it from anywhere with `openCardInspector({ image, name })`;
@@ -22,8 +20,7 @@ import type { GlitterTier } from "@/lib/fun";
  * stops when nothing is animating.
  */
 
-/** `glitter`: the front's glitter (glitterTier in src/lib/fun.ts); it follows the live rotation. Never on the back. */
-export type InspectCard = { image?: string; name: string; glitter?: GlitterTier };
+export type InspectCard = { image?: string; name: string };
 
 export const INSPECT_OPEN_EVENT = "mimibinder:inspect-card";
 const OPEN_EVENT = INSPECT_OPEN_EVENT;
@@ -49,7 +46,7 @@ export function CardInspector() {
     const onOpen = (e: Event) => {
       const detail = (e as CustomEvent<InspectCard>).detail;
       if (!detail?.name) return;
-      setCard({ image: detail.image, name: detail.name, glitter: detail.glitter });
+      setCard({ image: detail.image, name: detail.name });
       setOpenId((n) => n + 1);
     };
     window.addEventListener(OPEN_EVENT, onOpen);
@@ -137,7 +134,6 @@ function InspectorOverlay({ card, onClose }: { card: InspectCard; onClose: () =>
   const surfaceRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const frontFace = useRef<HTMLDivElement>(null);
   const frontGlare = useRef<HTMLDivElement>(null);
   const frontShade = useRef<HTMLDivElement>(null);
   const backGlare = useRef<HTMLDivElement>(null);
@@ -186,17 +182,8 @@ function InspectorOverlay({ card, onClose }: { card: InspectCard; onClose: () =>
     };
     const n = [m[2], m[5], m[8]];
     light(n, frontGlare.current, frontShade.current, 1);
-    // Glitter (front only): the light field slides with the face's tilt, and specks brighten as the face
-    // turns toward the light (--gs). The card's in-plane spin (its X axis) adds a little so a twist twinkles too.
-    const face = frontFace.current;
-    if (face && card.glitter && card.glitter !== "none") {
-      const spec = Math.max(0, n[0] * H[0] + n[1] * H[1] + n[2] * H[2]);
-      face.style.setProperty("--gx", (n[0] + m[3] * 0.35).toFixed(4));
-      face.style.setProperty("--gy", (n[1] - m[0] * 0.35 + 0.35).toFixed(4));
-      face.style.setProperty("--gs", Math.pow(spec, 3).toFixed(3));
-    }
     light([-n[0], -n[1], -n[2]], backGlare.current, backShade.current, -1);
-  }, [card.glitter]);
+  }, []);
 
   const clampPose = useCallback(() => {
     const el = cardRef.current;
@@ -490,7 +477,7 @@ function InspectorOverlay({ card, onClose }: { card: InspectCard; onClose: () =>
           ))}
 
           {/* Front */}
-          <div ref={frontFace} className={`${face} bg-surface-2`} style={{ transform: "translateZ(1px)", boxShadow: "var(--card-shadow)" }} data-testid="card-inspector-front">
+          <div className={`${face} bg-surface-2`} style={{ transform: "translateZ(1px)", boxShadow: "var(--card-shadow)" }} data-testid="card-inspector-front">
             {low && !lowFailed && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -515,7 +502,6 @@ function InspectorOverlay({ card, onClose }: { card: InspectCard; onClose: () =>
               />
             )}
             {(!low || lowFailed) && (!high || hiFailed || !hiLoaded) && <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-sm text-muted">{card.name}</div>}
-            {card.glitter && card.glitter !== "none" && ((low && !lowFailed) || (high && !hiFailed)) && <Glitter tier={card.glitter} big />}
             {/* Lighting: shade darkens faces turned from the light; glare is a specular sheen. */}
             <div ref={frontShade} aria-hidden="true" className="pointer-events-none absolute inset-0 bg-black opacity-0" />
             <div ref={frontGlare} aria-hidden="true" className="pointer-events-none absolute inset-0 mix-blend-overlay motion-reduce:hidden" style={glareStyle} />

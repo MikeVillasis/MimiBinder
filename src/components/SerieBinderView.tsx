@@ -6,7 +6,6 @@ import { getSeries, getSets } from "@/lib/api-client";
 import { setCompletion } from "@/lib/collection";
 import { useEntries, useSettings } from "@/lib/db";
 import { langOf, splitId } from "@/lib/lang";
-import { glitterTier, strongestGlitter, type GlitterTier } from "@/lib/fun";
 import type { CollectionEntry } from "@/lib/types";
 import { CardTile, QtyBadge } from "./CardTile";
 import { localIdNum, useAsync } from "./hooks";
@@ -79,11 +78,10 @@ export function SerieBinderView({ serieId }: { serieId: string }) {
           {ownedSets.map((s) => {
             const list = bySet.get(s.id)!;
             const c = setCompletion(list, s, { includeSecret });
-            const byCard = new Map<string, { e: CollectionEntry; n: number; g: GlitterTier }>();
+            const byCard = new Map<string, { e: CollectionEntry; n: number }>();
             list.forEach((e) => {
               const cur = byCard.get(e.cardId);
-              const g = glitterTier({ ...e, setOfficialCount: s.officialCount });
-              byCard.set(e.cardId, { e: cur?.e ?? e, n: (cur?.n ?? 0) + e.quantity, g: strongestGlitter([cur?.g ?? "none", g]) });
+              byCard.set(e.cardId, { e: cur?.e ?? e, n: (cur?.n ?? 0) + e.quantity });
             });
             const cards = [...byCard.values()].sort((a, b) => localIdNum(a.e.localId) - localIdNum(b.e.localId));
             return (
@@ -101,8 +99,8 @@ export function SerieBinderView({ serieId }: { serieId: string }) {
                   </div>
                 </Link>
                 <div className="grid grid-cols-3 gap-x-2.5 gap-y-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7">
-                  {cards.map(({ e, n, g }) => (
-                    <CardTile key={e.cardId} id={e.cardId} name={e.cardName} localId={e.localId} image={e.image} badge={<QtyBadge n={n} />} glitter={g} />
+                  {cards.map(({ e, n }) => (
+                    <CardTile key={e.cardId} id={e.cardId} name={e.cardName} localId={e.localId} image={e.image} badge={<QtyBadge n={n} />} />
                   ))}
                 </div>
               </section>

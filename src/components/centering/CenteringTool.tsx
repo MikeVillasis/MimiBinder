@@ -9,7 +9,7 @@ import type { CardDetail } from "@/lib/types";
 import { CardImage } from "../CardImage";
 import { Button, PageHeader, SectionHeader, Surface, cx } from "../ui";
 import { AssessmentLog } from "./AssessmentLog";
-import { fullArtReason } from "@/lib/fullArt";
+import { fullArtReason } from "./fullArt";
 import { CaptureButtons } from "./CaptureButtons";
 import { ConditionPanel } from "./ConditionPanel";
 import { CornerEditor } from "./CornerEditor";

@@ -8,7 +8,7 @@ import { useEntries } from "@/lib/db";
 import { langOf, splitId } from "@/lib/lang";
 import { useCollectionPrices } from "@/lib/useCollectionPrices";
 import { printingLabel } from "@/lib/stamps";
-import { glitterTier, isNewEntry } from "@/lib/fun";
+import { isNewEntry } from "@/lib/fun";
 import { CardImage } from "./CardImage";
 import { CardFan, CountUp, HoloCard, InspectHint, NewBadge } from "./fun";
 import { cardHref, entryCost, entryValue, useAsync, useMoney } from "./hooks";
@@ -176,8 +176,8 @@ export function DashboardView() {
                 <li key={e.id} className="deal w-[7.5rem] shrink-0 snap-start md:w-36" style={{ "--deal-i": i } as CSSProperties}>
                   <Link href={cardHref(e.cardId)} className="group block rounded-xl focus-visible:outline-offset-4" aria-label={fresh ? `${e.cardName}, new` : e.cardName}>
                     <div className="ui-motion ui-press ui-lift relative rounded-[6%/4.5%]">
-                      <HoloCard glitter={glitterTier(e)}>
-                        <CardImage image={e.image} name={e.cardName} glitter={glitterTier(e)} className="card-shadow" />
+                      <HoloCard>
+                        <CardImage image={e.image} name={e.cardName} className="card-shadow" />
                         {(fresh || langOf(e.cardId) === "ja") && (
                           <span className="absolute left-1.5 top-1.5 z-[1] flex items-center gap-1">
                             {langOf(e.cardId) === "ja" && <LangBadge />}
@@ -212,7 +212,7 @@ export function DashboardView() {
                     <span className="flex items-center gap-3">
                       <span className="w-4 text-center text-[13px] font-semibold tabular-nums text-muted">{i + 1}</span>
                       <span className="block w-10">
-                        <CardImage image={e.image} name={e.cardName} glitter={glitterTier(e)} />
+                        <CardImage image={e.image} name={e.cardName} />
                       </span>
                     </span>
                   }

@@ -6,7 +6,7 @@ import { getSet } from "@/lib/api-client";
 import { setCompletion } from "@/lib/collection";
 import { useEntries, useSettings } from "@/lib/db";
 import { langOf, splitId } from "@/lib/lang";
-import { glitterTier, MILESTONES, strongestGlitter, type GlitterTier } from "@/lib/fun";
+import { MILESTONES } from "@/lib/fun";
 import { PREF, usePref, writePref } from "@/lib/prefs";
 import { BinderPages } from "./BinderPages";
 import { CardTile, QtyBadge } from "./CardTile";
@@ -28,12 +28,6 @@ export function SetBinderView({ setId }: { setId: string }) {
   const qty = useMemo(() => {
     const m = new Map<string, number>();
     mine.forEach((e) => m.set(e.cardId, (m.get(e.cardId) ?? 0) + e.quantity));
-    return m;
-  }, [mine]);
-  // Owned copies know their rarity and printing; the set list itself only has the number.
-  const ownedGlitter = useMemo(() => {
-    const m = new Map<string, GlitterTier>();
-    mine.forEach((e) => m.set(e.cardId, strongestGlitter([m.get(e.cardId) ?? "none", glitterTier(e)])));
     return m;
   }, [mine]);
   // Remembered on this device. The grid stays the default.
@@ -62,7 +56,6 @@ export function SetBinderView({ setId }: { setId: string }) {
       localId={card.localId}
       image={card.image}
       dim={!qty.has(card.id)}
-      glitter={strongestGlitter([ownedGlitter.get(card.id) ?? "none", glitterTier({ localId: card.localId, setOfficialCount: set.officialCount })])}
       badge={qty.has(card.id) ? <QtyBadge n={qty.get(card.id)!} /> : undefined}
     />
   );

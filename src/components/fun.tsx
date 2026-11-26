@@ -2,10 +2,9 @@
 
 // The "fun" layer: decorative, original, and safe to remove. See docs/proposals/FUN_UPGRADES.md.
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { countUpValue, MILESTONE_COPY, type FoilTier, type GlitterTier, type Milestone } from "@/lib/fun";
+import { countUpValue, MILESTONE_COPY, type FoilTier, type Milestone } from "@/lib/fun";
 import { haptic, motionOK, PREF, takeMilestone, usePref, writePref } from "@/lib/prefs";
 import { CardBack } from "./CardBack";
-import { Glitter } from "./Glitter";
 import { INSPECT_OPEN_EVENT } from "./CardInspector";
 import { cx } from "./ui";
 
@@ -16,23 +15,16 @@ import { cx } from "./ui";
 /**
  * Wraps card art. With a mouse, the card leans toward the pointer and a soft light follows it;
  * `tier` adds a foil band (card page). Touch and pen input are ignored, so phones pay nothing.
- * `glitter` adds sparkly specks (pure CSS, see "Glitter" in globals.css): with a mouse they twinkle as the
- * pointer moves; on touch screens they shift as the tile scrolls past. Nothing is rendered for "none".
  * It adds no click, capture or hold logic: hold-to-inspect and links underneath work as before.
  */
 export function HoloCard({
   tier = "none",
-  glitter = "none",
-  dim = false,
   maxTilt = 7,
   sweep = false,
   className,
   children,
 }: {
   tier?: FoilTier;
-  glitter?: GlitterTier;
-  /** The art is faded (e.g. a card you don't own): glitter is toned right down. */
-  dim?: boolean;
   /** Largest lean in degrees. */
   maxTilt?: number;
   /** One light sweep when it appears (foil cards on the card page). */
@@ -59,9 +51,6 @@ export function HoloCard({
     el.style.setProperty("--holo-x", `${(px * r.width).toFixed(1)}px`);
     el.style.setProperty("--holo-y", `${(py * r.height).toFixed(1)}px`);
     el.style.setProperty("--holo-p", px.toFixed(3));
-    // Glitter light field: moves against the pointer, like light sliding across a tilted card.
-    el.style.setProperty("--gx", (-(px - 0.5) * 2).toFixed(3));
-    el.style.setProperty("--gy", (-(py - 0.5) * 2).toFixed(3));
     el.setAttribute("data-tilt", "");
     el.setAttribute("data-active", "");
   };
@@ -79,21 +68,11 @@ export function HoloCard({
     el.removeAttribute("data-active");
     el.style.setProperty("--holo-rx", "0deg");
     el.style.setProperty("--holo-ry", "0deg");
-    el.style.setProperty("--gx", "0");
-    el.style.setProperty("--gy", "0");
   };
 
   return (
-    <div
-      ref={ref}
-      className={cx("holo", className)}
-      data-foil={tier}
-      data-dim={dim ? "" : undefined}
-      onPointerMove={onPointerMove}
-      onPointerLeave={onPointerLeave}
-    >
+    <div ref={ref} className={cx("holo", className)} data-foil={tier} onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
       {children}
-      {glitter !== "none" && <Glitter tier={glitter} />}
       <span className="holo-fx" aria-hidden="true">
         <span className="holo-foil" />
         <span className="holo-glare" />

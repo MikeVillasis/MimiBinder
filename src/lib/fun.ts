@@ -1,7 +1,5 @@
 // Pure helpers behind the "fun" UI (milestones, "New" badge, count-up, foil tiers, binder pages).
 // No prices are computed here: the count-up only interpolates between two already-computed totals.
-import { fullArtReason } from "./fullArt";
-import type { Variant } from "./types";
 
 export const MILESTONES = [25, 50, 75, 100] as const;
 export type Milestone = (typeof MILESTONES)[number];
@@ -69,51 +67,6 @@ export function foilTier(rarity: string | undefined): FoilTier {
   if (/uncommon|^common$/.test(r)) return "none";
   if (/rare|holo|double|promo|classic|legend|prime|lv\.x|ex|gx|vmax|vstar|\bv\b/.test(r)) return "sheen";
   return "none";
-}
-
-/**
- * Glitter: fine specks over the art that twinkle with the viewing angle (thumbnails, card page, inspector).
- * - "prismatic": full-art and textured cards (ultra, illustration, special illustration, hyper, secret rares;
- *   Japanese SAR, SR, AR, HR, UR, CHR, CSR, SSR), or a number past the set's official count (Japanese cards
- *   often have rarity "None", and set grids have no rarity at all). Coloured specks.
- * - "light": holo rares and an owned holo copy. Silver specks.
- * - "reverse": an owned reverse-holo copy of a card that is not prismatic. Silver specks on the frame only.
- * - "none": commons, uncommons, plain rares, promos, and anything unknown.
- */
-export type GlitterTier = "none" | "light" | "reverse" | "prismatic";
-
-export interface GlitterCard {
-  rarity?: string;
-  /** Printing of an owned copy; search results and set lists don't have one. */
-  variant?: Variant;
-  localId?: string;
-  setOfficialCount?: number;
-}
-
-const GLITTER_PRISMATIC = /ultra|illustration|special|hyper|secret|rainbow|full art|gold|crown|amazing|black white rare/i;
-const GLITTER_LIGHT = /holo|double rare|ace spec|radiant|shiny|prime|legend|lv\.x|\bv\b|vmax|vstar|\bex\b|\bgx\b|classic/i;
-// Japanese "double rare" codes: whole word and case-sensitive, like the full-art codes ("RR", not "Rare").
-const GLITTER_LIGHT_CODE = /(^|[^A-Za-z])(RR|RRR)([^A-Za-z]|$)/;
-
-/** How much glitter a card gets (see GlitterTier). ACE SPEC is a holo, not full art: light. */
-export function glitterTier(card: GlitterCard | null | undefined): GlitterTier {
-  if (!card) return "none";
-  const r = (card.rarity ?? "").trim();
-  const named = r && r !== "None" ? r : "";
-  if (fullArtReason(card) || (named && GLITTER_PRISMATIC.test(named))) return "prismatic";
-  if (card.variant === "reverse") return "reverse";
-  if (card.variant === "holo") return "light";
-  if (named && !/^(un)?common$/i.test(named) && (GLITTER_LIGHT.test(named) || GLITTER_LIGHT_CODE.test(named))) return "light";
-  return "none";
-}
-
-const GLITTER_RANK: Record<GlitterTier, number> = { none: 0, reverse: 1, light: 2, prismatic: 3 };
-
-/** The showiest of several (e.g. every owned copy of one card). */
-export function strongestGlitter(tiers: Iterable<GlitterTier>): GlitterTier {
-  let best: GlitterTier = "none";
-  for (const t of tiers) if (GLITTER_RANK[t] > GLITTER_RANK[best]) best = t;
-  return best;
 }
 
 /** Split a list into binder pages of `size` pockets (the last page may be short). */
