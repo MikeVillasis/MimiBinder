@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { CardImage } from "./CardImage";
 import { langOf } from "@/lib/lang";
+import type { GlitterTier } from "@/lib/fun";
 import { HoloCard, NewBadge } from "./fun";
 import { cardHref } from "./hooks";
 import { LangBadge, cx } from "./ui";
@@ -17,6 +18,7 @@ import { LangBadge, cx } from "./ui";
  * - `footer`: anything else under the meta.
  * - `index`: position in its grid; the first tiles are "dealt in" with a short stagger.
  * - `isNew`: shows a "New" badge (added in the last few days).
+ * - `glitter`: sparkly foil over the art and in the inspector (glitterTier in src/lib/fun.ts).
  */
 export function CardTile({
   id,
@@ -31,6 +33,7 @@ export function CardTile({
   footer,
   index,
   isNew,
+  glitter = "none",
 }: {
   id: string;
   name: string;
@@ -44,6 +47,7 @@ export function CardTile({
   footer?: ReactNode;
   index?: number;
   isNew?: boolean;
+  glitter?: GlitterTier;
 }) {
   const sub = [localId ? `#${localId}` : null, meta].filter(Boolean);
   return (
@@ -53,8 +57,8 @@ export function CardTile({
         className="ui-motion ui-press ui-lift relative block rounded-[6%/4.5%] focus-visible:outline-offset-4"
         aria-label={`${name}${localId ? ` #${localId}` : ""}${isNew ? ", new" : ""}`}
       >
-        <HoloCard>
-          <CardImage image={image} name={name} dim={dim} className="card-shadow" />
+        <HoloCard glitter={glitter} dim={dim}>
+          <CardImage image={image} name={name} dim={dim} glitter={glitter} className="card-shadow" />
           {badge && <span className="absolute right-1.5 top-1.5 z-[1]">{badge}</span>}
           {(isNew || langOf(id) === "ja") && (
             <span className="absolute left-1.5 top-1.5 z-[1] flex items-center gap-1">

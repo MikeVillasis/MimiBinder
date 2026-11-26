@@ -4,6 +4,8 @@ import {
   countUpValue,
   easeOutCubic,
   foilTier,
+  glitterTier,
+  strongestGlitter,
   isNewEntry,
   markMilestonesShown,
   NEW_BADGE_MS,
@@ -103,6 +105,57 @@ describe("foilTier", () => {
     expect(foilTier("Special illustration rare")).toBe("rainbow");
     expect(foilTier("Secret Rare")).toBe("rainbow");
     expect(foilTier("Hyper rare")).toBe("rainbow");
+  });
+});
+
+describe("glitterTier", () => {
+  it("gives commons, uncommons, plain rares and unknowns none", () => {
+    for (const rarity of [undefined, "", "None", "Common", "Uncommon", "Rare", "Promo"]) expect(glitterTier({ rarity })).toBe("none");
+    expect(glitterTier(null)).toBe("none");
+    expect(glitterTier({ rarity: "Common", variant: "normal" })).toBe("none");
+    expect(glitterTier({ rarity: "Common", variant: "firstEdition" })).toBe("none");
+  });
+
+  it("gives holo rares light glitter", () => {
+    for (const rarity of ["Rare Holo", "Holo Rare", "Double rare", "ACE SPEC Rare", "Radiant Rare", "Rare Holo VMAX", "Rare Holo V", "Shiny rare", "RR", "RRR"])
+      expect(glitterTier({ rarity }), rarity).toBe("light");
+  });
+
+  it("gives full-art and textured rarities prismatic glitter", () => {
+    for (const rarity of ["Ultra Rare", "Illustration rare", "Special illustration rare", "Hyper rare", "Secret Rare", "Shiny Ultra Rare", "Rare Rainbow", "Mega Hyper Rare", "Amazing Rare", "Crown"])
+      expect(glitterTier({ rarity }), rarity).toBe("prismatic");
+    for (const rarity of ["SAR", "SR", "AR", "HR", "UR", "CHR", "CSR", "SSR"]) expect(glitterTier({ rarity }), rarity).toBe("prismatic");
+  });
+
+  it("matches Japanese codes as whole words only (ACE is not full art)", () => {
+    expect(glitterTier({ rarity: "ACE" })).toBe("none");
+    expect(glitterTier({ rarity: "ARCEUS" })).toBe("none");
+    expect(glitterTier({ rarity: "R" })).toBe("none");
+  });
+
+  it("falls back to the card number past the set's official count", () => {
+    // Sylveon ex, Prismatic Evolutions 156/131: a set grid has no rarity.
+    expect(glitterTier({ localId: "156", setOfficialCount: 131 })).toBe("prismatic");
+    expect(glitterTier({ rarity: "None", localId: "211", setOfficialCount: 187 })).toBe("prismatic");
+    expect(glitterTier({ localId: "131", setOfficialCount: 131 })).toBe("none");
+    expect(glitterTier({ localId: "TG05", setOfficialCount: 150 })).toBe("none");
+  });
+
+  it("lets an owned printing add glitter to a plain card", () => {
+    expect(glitterTier({ rarity: "Common", variant: "reverse" })).toBe("reverse");
+    expect(glitterTier({ rarity: "Rare Holo", variant: "reverse" })).toBe("reverse");
+    expect(glitterTier({ rarity: "Uncommon", variant: "holo" })).toBe("light");
+    expect(glitterTier({ rarity: "None", variant: "holo" })).toBe("light");
+    // A full-art card stays prismatic whatever the printing.
+    expect(glitterTier({ rarity: "Special illustration rare", variant: "holo" })).toBe("prismatic");
+    expect(glitterTier({ rarity: "Ultra Rare", variant: "reverse" })).toBe("prismatic");
+  });
+
+  it("picks the showiest of several copies", () => {
+    expect(strongestGlitter([])).toBe("none");
+    expect(strongestGlitter(["none", "reverse"])).toBe("reverse");
+    expect(strongestGlitter(["reverse", "light", "none"])).toBe("light");
+    expect(strongestGlitter(["light", "prismatic", "reverse"])).toBe("prismatic");
   });
 });
 

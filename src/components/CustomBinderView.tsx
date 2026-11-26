@@ -7,6 +7,7 @@ import { removeBinder, updateBinder, updateEntry, useBinders, useEntries } from 
 import { printingLabel } from "@/lib/stamps";
 import { CardImage } from "./CardImage";
 import { CardFan } from "./fun";
+import { glitterTier } from "@/lib/fun";
 import { CardTile, QtyBadge } from "./CardTile";
 import { Button, CardGridSkeleton, ConfirmDialog, EmptyState, Field, ListGroup, PageHeader, Sheet, buttonCls, cx, inputCls } from "./ui";
 
@@ -101,6 +102,7 @@ export function CustomBinderView({ id }: { id: string }) {
               id={e.cardId}
               name={e.cardName}
               image={e.image}
+              glitter={glitterTier(e)}
               badge={e.quantity > 1 ? <QtyBadge n={e.quantity} /> : undefined}
               meta={printingLabel(e.variant, e.stamp)}
               action={
@@ -156,7 +158,7 @@ export function CustomBinderView({ id }: { id: string }) {
             {available.map((e) => (
               <li key={e.id} className="list-row flex items-center gap-3 px-4 py-2.5">
                 <div className="w-10 shrink-0">
-                  <CardImage image={e.image} name={e.cardName} />
+                  <CardImage image={e.image} name={e.cardName} glitter={glitterTier(e)} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[15px] font-semibold leading-snug">{e.cardName}</div>

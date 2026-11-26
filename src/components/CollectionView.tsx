@@ -8,7 +8,7 @@ import { printingKey, printingLabel } from "@/lib/stamps";
 import { matchesCardNumber, parseCardQuery } from "@/lib/search-query";
 import { useCollectionPrices } from "@/lib/useCollectionPrices";
 import { CONDITION_LABELS, VARIANT_LABELS, type CollectionEntry, type Condition, type Variant } from "@/lib/types";
-import { isNewEntry } from "@/lib/fun";
+import { glitterTier, isNewEntry } from "@/lib/fun";
 import { CardImage } from "./CardImage";
 import { CardFan, InspectHint } from "./fun";
 import { CardTile, PriceChip, QtyBadge } from "./CardTile";
@@ -265,6 +265,7 @@ export function CollectionView() {
               name={e.cardName}
               localId={e.localId}
               image={e.image}
+              glitter={glitterTier(e)}
               badge={e.quantity > 1 ? <QtyBadge n={e.quantity} /> : undefined}
               price={value != null ? <PriceChip label={fmtDisplay(value)}>{value >= 1000 ? compactFmt(value) : fmtDisplay(value)}</PriceChip> : undefined}
               meta={`${printingLabel(e.variant, e.stamp)} · ${e.condition}`}
@@ -287,7 +288,7 @@ export function CollectionView() {
             <li key={e.id} className="list-row">
               <div className="relative flex gap-3 px-4 py-3 ui-motion has-[a:hover]:bg-surface-2/60">
                 <div className="w-11 shrink-0">
-                  <CardImage image={e.image} name={e.cardName} />
+                  <CardImage image={e.image} name={e.cardName} glitter={glitterTier(e)} />
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col">
                   <div className="flex min-w-0 items-start gap-3">
