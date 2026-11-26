@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { cardImage } from "@/lib/pricing";
+import type { GlitterTier } from "@/lib/fun";
 import { haptic } from "@/lib/prefs";
 import { openCardInspector } from "./CardInspector";
 
@@ -13,7 +14,7 @@ const HOLD_SLOP_PX = 10;
  * a few px (e.g. to scroll) cancels the hold. After a hold fires, the click that follows is swallowed so
  * a surrounding <Link> or button does not activate.
  */
-function useHoldToInspect(enabled: boolean, image: string | undefined, name: string) {
+function useHoldToInspect(enabled: boolean, image: string | undefined, name: string, glitter?: GlitterTier) {
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const start = useRef<{ x: number; y: number; id: number; type: string; t: number } | null>(null);
   const fired = useRef(false);
@@ -41,7 +42,7 @@ function useHoldToInspect(enabled: boolean, image: string | undefined, name: str
     fired.current = true;
     ring(null);
     haptic("tick");
-    openCardInspector({ image, name });
+    openCardInspector({ image, name, glitter });
   };
 
   if (!enabled) return undefined;
@@ -91,6 +92,7 @@ export function CardImage({
   className = "",
   dim = false,
   inspectable = true,
+  glitter,
 }: {
   image?: string;
   name: string;
@@ -99,6 +101,8 @@ export function CardImage({
   dim?: boolean;
   /** Press and hold opens the full-screen inspector. */
   inspectable?: boolean;
+  /** Glitter the inspector shows on the front (the tile draws its own via HoloCard). */
+  glitter?: GlitterTier;
 }) {
   const src = cardImage(image, quality);
   const [failedSrc, setFailedSrc] = useState<string>();
@@ -106,7 +110,7 @@ export function CardImage({
   const [loadedSrc, setLoadedSrc] = useState<string>();
   const imgRef = useRef<HTMLImageElement>(null);
   const loaded = loadedSrc === src;
-  const hold = useHoldToInspect(inspectable && !failed, image, name);
+  const hold = useHoldToInspect(inspectable && !failed, image, name, glitter);
 
   // Images served from cache can finish before React attaches onLoad.
   useEffect(() => {

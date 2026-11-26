@@ -368,6 +368,137 @@ body {
   animation: pv-sweep 900ms ease-out 350ms;
 }
 
+/*
+ * Glitter (data-glitter: light | reverse | prismatic, from glitterTier() in src/lib/fun.ts). Pure CSS, no loop:
+ * - `.holo-glitter` is masked by fixed speck tiles (tiny generated SVGs, three coprime sizes so no repeat shows),
+ *   so the specks stay put on the card like real foil;
+ * - its child `i` is a "light field" (soft blobs, plus a rainbow for prismatic) that slides underneath. As it moves,
+ *   different specks catch the light and change colour: the twinkle.
+ * The field moves with --gx / --gy (-1..1): the mouse on HoloCard, the live rotation in the inspector. On touch
+ * screens a scroll-driven transform shifts it while a tile scrolls past (compositor-run, nothing at rest).
+ * Calm mode keeps the specks, still.
+ */
+.holo-glitter {
+  --glitter-a: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='61' height='61' fill='white'%3E%3Ccircle cx='24.3' cy='56.2' r='0.62' opacity='0.85'/%3E%3Ccircle cx='-2.1' cy='14.3' r='0.46' opacity='0.86'/%3E%3Ccircle cx='58.9' cy='14.3' r='0.46' opacity='0.86'/%3E%3Ccircle cx='20' cy='24.1' r='0.86' opacity='0.87'/%3E%3Ccircle cx='38.3' cy='35.5' r='0.48' opacity='0.83'/%3E%3Ccircle cx='45.2' cy='43.1' r='0.63' opacity='0.87'/%3E%3Ccircle cx='25.8' cy='47.7' r='0.9' opacity='0.76'/%3E%3Ccircle cx='45.9' cy='26.6' r='0.37' opacity='0.68'/%3E%3Ccircle cx='14.7' cy='42.3' r='0.77' opacity='0.69'/%3E%3Ccircle cx='15.4' cy='19.7' r='0.73' opacity='0.63'/%3E%3Ccircle cx='38.7' cy='20.1' r='0.44' opacity='0.67'/%3E%3Ccircle cx='41.9' cy='27.6' r='0.54' opacity='0.66'/%3E%3Ccircle cx='53.3' cy='42.2' r='0.62' opacity='0.64'/%3E%3Ccircle cx='55.1' cy='15.1' r='0.58' opacity='0.64'/%3E%3Ccircle cx='5' cy='25.4' r='0.7' opacity='0.93'/%3E%3Ccircle cx='3.9' cy='16.8' r='0.56' opacity='0.79'/%3E%3Ccircle cx='25.6' cy='15.1' r='0.69' opacity='0.89'/%3E%3Ccircle cx='37.4' cy='52.8' r='0.76' opacity='0.86'/%3E%3Ccircle cx='20.8' cy='18.7' r='0.66' opacity='0.75'/%3E%3Ccircle cx='18.9' cy='33.2' r='0.72' opacity='0.84'/%3E%3Ccircle cx='55' cy='10.8' r='0.56' opacity='0.56'/%3E%3Ccircle cx='19.7' cy='16.8' r='0.38' opacity='0.91'/%3E%3Ccircle cx='8.8' cy='49.6' r='0.85' opacity='0.83'/%3E%3Ccircle cx='23.9' cy='31.8' r='0.51' opacity='0.54'/%3E%3Ccircle cx='32.4' cy='14.8' r='0.7' opacity='0.82'/%3E%3Ccircle cx='2.9' cy='6.4' r='0.65' opacity='0.7'/%3E%3Ccircle cx='63.9' cy='6.4' r='0.65' opacity='0.7'/%3E%3Ccircle cx='27.4' cy='6.2' r='0.36' opacity='0.98'/%3E%3Ccircle cx='54.4' cy='54.9' r='0.63' opacity='0.77'/%3E%3Ccircle cx='47' cy='-2' r='0.54' opacity='0.57'/%3E%3Ccircle cx='47' cy='59' r='0.54' opacity='0.57'/%3E%3Ccircle cx='57.8' cy='19.6' r='0.83' opacity='0.58'/%3E%3Ccircle cx='29.7' cy='31.1' r='0.43' opacity='0.85'/%3E%3Cpath d='M17.6 2.1L17.97 3.43L19.3 3.8L17.97 4.17L17.6 5.5L17.23 4.17L15.9 3.8L17.23 3.43Z'/%3E%3Cpath d='M12.3 6.9L12.78 8.62L14.5 9.1L12.78 9.58L12.3 11.3L11.82 9.58L10.1 9.1L11.82 8.62Z'/%3E%3C/svg%3E");
+  --glitter-b: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='43' height='43' fill='white'%3E%3Ccircle cx='26.7' cy='0.2' r='0.57' opacity='0.73'/%3E%3Ccircle cx='26.7' cy='43.2' r='0.57' opacity='0.73'/%3E%3Ccircle cx='2.3' cy='0.7' r='0.56' opacity='0.52'/%3E%3Ccircle cx='2.3' cy='43.7' r='0.56' opacity='0.52'/%3E%3Ccircle cx='45.3' cy='0.7' r='0.56' opacity='0.52'/%3E%3Ccircle cx='45.3' cy='43.7' r='0.56' opacity='0.52'/%3E%3Ccircle cx='27' cy='20.9' r='0.81' opacity='0.68'/%3E%3Ccircle cx='7' cy='13.5' r='0.84' opacity='0.85'/%3E%3Ccircle cx='-1.4' cy='16.1' r='0.65' opacity='0.59'/%3E%3Ccircle cx='41.6' cy='16.1' r='0.65' opacity='0.59'/%3E%3Ccircle cx='23.4' cy='13.6' r='0.9' opacity='0.68'/%3E%3Ccircle cx='31.5' cy='18.7' r='0.62' opacity='0.87'/%3E%3Ccircle cx='1.3' cy='26.7' r='0.44' opacity='0.5'/%3E%3Ccircle cx='44.3' cy='26.7' r='0.44' opacity='0.5'/%3E%3Ccircle cx='6.7' cy='23.1' r='0.81' opacity='0.93'/%3E%3Ccircle cx='2.3' cy='22.8' r='0.75' opacity='0.57'/%3E%3Ccircle cx='45.3' cy='22.8' r='0.75' opacity='0.57'/%3E%3Ccircle cx='39.9' cy='-2.6' r='0.85' opacity='0.7'/%3E%3Ccircle cx='39.9' cy='40.4' r='0.85' opacity='0.7'/%3E%3Ccircle cx='0.4' cy='32.7' r='0.65' opacity='0.54'/%3E%3Ccircle cx='43.4' cy='32.7' r='0.65' opacity='0.54'/%3E%3Ccircle cx='4.5' cy='38.7' r='0.53' opacity='0.59'/%3E%3Ccircle cx='8.2' cy='18.8' r='0.87' opacity='0.92'/%3E%3Ccircle cx='23.8' cy='25.6' r='0.39' opacity='0.74'/%3E%3Ccircle cx='11.2' cy='18.4' r='0.67' opacity='0.5'/%3E%3Cpath d='M27.9 -3.7L28.38 -1.98L30.1 -1.5L28.38 -1.02L27.9 0.7L27.42 -1.02L25.7 -1.5L27.42 -1.98Z'/%3E%3Cpath d='M27.9 39.3L28.38 41.02L30.1 41.5L28.38 41.98L27.9 43.7L27.42 41.98L25.7 41.5L27.42 41.02Z'/%3E%3C/svg%3E");
+  --glitter-c: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='white'%3E%3Ccircle cx='9.2' cy='9' r='0.54' opacity='0.72'/%3E%3Ccircle cx='9' cy='13.1' r='0.89' opacity='0.79'/%3E%3Ccircle cx='3.8' cy='13.6' r='0.42' opacity='0.91'/%3E%3Ccircle cx='13.1' cy='19.5' r='0.7' opacity='0.61'/%3E%3Ccircle cx='18.6' cy='2.1' r='0.62' opacity='0.77'/%3E%3Ccircle cx='18.6' cy='31.1' r='0.62' opacity='0.77'/%3E%3Ccircle cx='9.7' cy='15.8' r='0.66' opacity='0.82'/%3E%3Ccircle cx='-1.5' cy='11.9' r='0.72' opacity='0.95'/%3E%3Ccircle cx='27.5' cy='11.9' r='0.72' opacity='0.95'/%3E%3Ccircle cx='5.8' cy='14.9' r='0.37' opacity='0.93'/%3E%3Ccircle cx='-2.2' cy='0.2' r='0.39' opacity='0.57'/%3E%3Ccircle cx='-2.2' cy='29.2' r='0.39' opacity='0.57'/%3E%3Ccircle cx='26.8' cy='0.2' r='0.39' opacity='0.57'/%3E%3Ccircle cx='26.8' cy='29.2' r='0.39' opacity='0.57'/%3E%3C/svg%3E");
+  --glitter-travel: 26px;
+  position: absolute;
+  inset: 0;
+  overflow: clip; /* not hidden: a scroll container would capture the view() timeline below */
+  border-radius: inherit;
+  pointer-events: none;
+  --gsz: 1;
+  opacity: var(--glitter-o, 0.7);
+  -webkit-mask-image: var(--glitter-a), var(--glitter-b);
+  mask-image: var(--glitter-a), var(--glitter-b);
+  -webkit-mask-size: calc(61px * var(--gsz)) calc(61px * var(--gsz)), calc(43px * var(--gsz)) calc(43px * var(--gsz));
+  mask-size: calc(61px * var(--gsz)) calc(61px * var(--gsz)), calc(43px * var(--gsz)) calc(43px * var(--gsz));
+  transition: opacity 220ms ease-out;
+}
+/* On 1x screens a sub-pixel speck smears into nothing: slightly bigger specks there. */
+@media (max-resolution: 1.5dppx) {
+  .holo-glitter {
+    --gsz: 1.25;
+  }
+}
+/* The light field: bright blobs on a dim silver base with a faint tint (so specks still read on pale art),
+ * larger than the card so it can slide. Normal blending: a light-only blend would vanish on pale cards. */
+.holo-glitter > i {
+  position: absolute;
+  inset: -45%;
+  background:
+    radial-gradient(circle, rgb(255 255 255 / 0.95), rgb(255 255 255 / 0) 9px) 0 0 / 37px 37px,
+    radial-gradient(circle, rgb(255 255 255 / 0.85), rgb(255 255 255 / 0) 12px) 11px 7px / 53px 53px,
+    repeating-linear-gradient(
+      125deg,
+      rgb(200 225 255 / 0.5) 0,
+      rgb(255 225 245 / 0.5) 45px,
+      rgb(255 245 200 / 0.5) 90px,
+      rgb(200 225 255 / 0.5) 135px
+    );
+  transform: translate3d(calc(var(--gx, 0) * var(--glitter-travel)), calc(var(--gy, 0) * var(--glitter-travel)), 0);
+}
+.holo-glitter[data-glitter="prismatic"] {
+  --glitter-o: 0.8;
+  -webkit-mask-image: var(--glitter-a), var(--glitter-b), var(--glitter-c);
+  mask-image: var(--glitter-a), var(--glitter-b), var(--glitter-c);
+  -webkit-mask-size: calc(61px * var(--gsz)) calc(61px * var(--gsz)), calc(43px * var(--gsz)) calc(43px * var(--gsz)), calc(29px * var(--gsz)) calc(29px * var(--gsz));
+  mask-size: calc(61px * var(--gsz)) calc(61px * var(--gsz)), calc(43px * var(--gsz)) calc(43px * var(--gsz)), calc(29px * var(--gsz)) calc(29px * var(--gsz));
+}
+.holo-glitter[data-glitter="prismatic"] > i {
+  background:
+    radial-gradient(circle, rgb(255 255 255 / 0.9), rgb(255 255 255 / 0) 9px) 0 0 / 37px 37px,
+    radial-gradient(circle, rgb(255 255 255 / 0.75), rgb(255 255 255 / 0) 12px) 11px 7px / 53px 53px,
+    repeating-linear-gradient(
+      125deg,
+      rgb(255 70 170 / 0.7) 0,
+      rgb(255 205 50 / 0.7) 34px,
+      rgb(60 240 150 / 0.7) 68px,
+      rgb(60 170 255 / 0.7) 102px,
+      rgb(170 100 255 / 0.7) 136px,
+      rgb(255 70 170 / 0.7) 170px
+    );
+}
+/* Reverse holo: the foil is the frame, so the art window (modern layout) stays clear. */
+.holo-glitter[data-glitter="reverse"] {
+  clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 7.5% 10.5%, 92.5% 10.5%, 92.5% 52.5%, 7.5% 52.5%, 7.5% 10.5%);
+}
+/* A faded (unowned) tile keeps only a hint of it. */
+.holo[data-dim] .holo-glitter {
+  --glitter-o: 0.25;
+}
+@media (hover: hover) and (pointer: fine) {
+  .holo .holo-glitter > i {
+    transition: transform 260ms var(--ease-out-ui);
+  }
+  .holo[data-active] .holo-glitter {
+    opacity: calc(var(--glitter-o, 0.7) + 0.2);
+  }
+  .holo[data-active] .holo-glitter > i {
+    transition-duration: 70ms;
+  }
+}
+/* Touch screens: no pointer, so the field shifts as the tile scrolls through the viewport. Compositor-run. */
+@keyframes pv-glint {
+  from { transform: translate3d(-22px, 30px, 0); }
+  to { transform: translate3d(22px, -30px, 0); }
+}
+@media (hover: none) {
+  @supports (animation-timeline: view()) {
+    .holo > .holo-glitter > i {
+      animation: pv-glint linear both;
+      animation-timeline: view();
+    }
+  }
+}
+/* Inspector: a big card, so specks travel further and prismatic cards get a moving rainbow wash too. */
+.glitter-big {
+  --glitter-travel: 150px;
+  --gsz: 1.5;
+  --glitter-o: calc(0.45 + var(--gs, 0.4) * 0.5);
+}
+.glitter-big[data-glitter="prismatic"] {
+  --glitter-o: calc(0.6 + var(--gs, 0.4) * 0.4);
+}
+.glitter-wash {
+  position: absolute;
+  inset: -60%;
+  pointer-events: none;
+  mix-blend-mode: color-dodge;
+  opacity: 0.32;
+  background: repeating-linear-gradient(
+    125deg,
+    rgb(255 110 180 / 0.6) 0,
+    rgb(255 210 100 / 0.6) 8%,
+    rgb(120 255 180 / 0.6) 16%,
+    rgb(100 190 255 / 0.6) 24%,
+    rgb(190 140 255 / 0.6) 32%,
+    rgb(255 110 180 / 0.6) 40%
+  );
+  transform: translate3d(calc(var(--gx, 0) * -90px), calc(var(--gy, 0) * -90px), 0);
+}
+
 /* "Added!" reveal: one quick turn showing the MimiBinder card back, plus sparkles. */
 .reveal-stage {
   position: relative;
@@ -499,6 +630,22 @@ body {
   .holo {
     transform: none !important;
   }
+  /* Glitter stays as a still texture: no twinkle, no drift. */
+  .holo-glitter > i {
+    animation: none !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .holo-glitter {
+    opacity: 0.5 !important;
+    transition: none !important;
+  }
+  .holo[data-dim] .holo-glitter {
+    opacity: 0.2 !important;
+  }
+  .glitter-wash {
+    display: none !important;
+  }
   .switch-thumb {
     transition: none !important;
   }
@@ -525,6 +672,21 @@ body {
   }
   .holo {
     transform: none !important;
+  }
+  .holo-glitter > i {
+    animation: none !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .holo-glitter {
+    opacity: 0.5 !important;
+    transition: none !important;
+  }
+  .holo[data-dim] .holo-glitter {
+    opacity: 0.2 !important;
+  }
+  .glitter-wash {
+    display: none !important;
   }
   [data-holding]::after {
     animation-duration: 0.01ms !important;

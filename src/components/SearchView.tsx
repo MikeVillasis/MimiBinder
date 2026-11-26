@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { searchCards } from "@/lib/api-client";
+import { useEntries } from "@/lib/db";
+import { glitterTier, strongestGlitter, type GlitterTier } from "@/lib/fun";
 import { parseLang } from "@/lib/lang";
 import { LANG_LABELS, type CardSummary, type Lang } from "@/lib/types";
 import { CardTile } from "./CardTile";
@@ -25,6 +27,13 @@ export function SearchView() {
   const [error, setError] = useState<string>();
   const reqId = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Results carry no rarity; cards you own glitter from your copies' rarity and printing.
+  const entries = useEntries();
+  const ownedGlitter = useMemo(() => {
+    const m = new Map<string, GlitterTier>();
+    (entries ?? []).forEach((e) => m.set(e.cardId, strongestGlitter([m.get(e.cardId) ?? "none", glitterTier(e)])));
+    return m;
+  }, [entries]);
 
   const run = (query: string, pg: number, l: Lang = lang) => {
     const id = ++reqId.current;
@@ -167,7 +176,7 @@ export function SearchView() {
           <InspectHint className="mb-3 mt-2" />
           <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {shown.map((c, i) => (
-              <CardTile key={c.id} index={i % 24} id={c.id} name={c.name} localId={c.localId} image={c.image} />
+              <CardTile key={c.id} index={i % 24} id={c.id} name={c.name} localId={c.localId} image={c.image} glitter={ownedGlitter.get(c.id)} />
             ))}
           </div>
           {hasMore && (

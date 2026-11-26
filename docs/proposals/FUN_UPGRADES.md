@@ -125,6 +125,10 @@ Effort: S (under an hour), M (a few hours), L (a day or more). Risk is the risk 
   low-end devices. Hold-to-inspect, click-to-open and drag behaviour are untouched because the wrapper adds no click or
   pointer-capture logic.
 - **Safe because:** purely decorative; overlays are `pointer-events: none` and `aria-hidden`.
+- **Glitter (added later):** foil cards also carry fine specks that twinkle with the viewing angle, on thumbnails, the
+  card page and the inspector (front face only), with strength from `glitterTier()` (see `docs/DESIGN.md`, Fun layer).
+  Pure CSS: a fixed speck mask over a sliding light field. Phones get a scroll-driven shift (compositor-run, nothing at
+  rest) and the full effect in the inspector, where it follows the card's live rotation.
 
 ### 3. "Added!" reveal (Done)
 - **What:** after you add a card, the big card does one quick turn with a sheen sweep and a small burst of sparkles,
